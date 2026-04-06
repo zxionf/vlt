@@ -57,6 +57,7 @@ dependencies {
     // 图标扩展（包含所有 Material 图标）
     implementation(libs.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
+    implementation(libs.androidx.foundation)
     // Compose 工具
     debugImplementation(libs.androidx.ui.tooling)
     // Activity 集成
@@ -69,6 +70,8 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    implementation(libs.androidx.compose.foundation)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

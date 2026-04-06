@@ -42,9 +42,12 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
     }
 
     fun updateItem(updatedItem: Pwd) {
-        _items.update { list ->
-            list.map { if (it.id == updatedItem.id) updatedItem else it }
+        viewModelScope.launch {
+            repository.update(updatedItem)
         }
+//        _items.update { list ->
+//            list.map { if (it.id == updatedItem.id) updatedItem else it }
+//        }
     }
 
     fun addItem(newItem: Pwd) {
@@ -53,6 +56,12 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
             repository.insert(newItem)
             // 由于 getAllItems() 返回的是 Flow，插入后数据库会发出新数据，
             // loadItems 中的 collect 会自动收到，UI 会自动更新。
+        }
+    }
+
+    fun deleteItem(which: Pwd) {
+        viewModelScope.launch {
+            repository.delete(which)
         }
     }
 }

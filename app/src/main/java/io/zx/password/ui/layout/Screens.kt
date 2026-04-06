@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -226,12 +228,42 @@ private fun IconTextCard(
 }
 
 @Composable
-private fun PwdItemCard(
+fun PwdItemCard(
     title: String,
     onClick: () -> Unit
 ){
     Card(modifier = Modifier.fillMaxSize(),onClick = onClick){
-        Text(text = title, modifier = Modifier.padding(16.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+//            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = title, modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.width(16.dp))
+            Icon(
+                imageVector = Icons.Filled.ContentCopy,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(8.dp)
+                    .size(24.dp),
+                tint = MaterialTheme.colorScheme.primary,
+                contentDescription = null,
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(8.dp)
+                    .size(24.dp),
+                tint = MaterialTheme.colorScheme.primary,
+                contentDescription = null,
+            )
+        }
     }
 }
 
@@ -247,13 +279,13 @@ fun EditPwdDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑密码项") },
+        title = { Text("编辑") },
         text = {
             Column {
                 OutlinedTextField(
                     value = editedTitle,
                     onValueChange = { editedTitle = it },
-                    label = { Text("标题") },
+                    label = { Text("描述") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
