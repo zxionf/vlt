@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PwdDao {
@@ -18,7 +19,7 @@ interface PwdDao {
     suspend fun delete(pwd : Pwd)
 
     @Query("SELECT * FROM pwd")
-    suspend fun getAll() : List<Pwd>
+    fun getAll() : Flow<List<Pwd>>
 
     @Query("SELECT * FROM pwd WHERE id = :id")
     suspend fun getPwdById(id : Int): Pwd?

@@ -54,8 +54,8 @@ class MainActivity : ComponentActivity() {
 //            pwdDao.insert(newUser)
 
             // 查询所有用户
-            val allpwds = pwdDao.getAll()
-            Log.e("Database", "用户列表: $allpwds")
+//            val allpwds = pwdDao.getAll()
+//            Log.e("Database", "用户列表: $allpwds")
         }
     }
     @Preview(showBackground = true)
