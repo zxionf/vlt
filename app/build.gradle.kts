@@ -3,6 +3,7 @@ import com.android.utils.TraceUtils.simpleId
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -63,6 +64,11 @@ dependencies {
     // ViewModel 集成（如果需要）
     //noinspection GradleDependency,GradleDependency
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    // room sqlite
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

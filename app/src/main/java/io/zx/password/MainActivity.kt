@@ -1,6 +1,7 @@
 package io.zx.password
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,8 +29,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import io.zx.password.ui.layout.MainScreen
 import io.zx.password.ui.theme.PasswordTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,7 +43,19 @@ class MainActivity : ComponentActivity() {
             PasswordTheme {
                 MainView()
             }
+        }
+        // 在协程中执行，避免阻塞主线程
+        lifecycleScope.launch(Dispatchers.IO) {
+            val db = PwdDB.getInstance(applicationContext)
+            val pwdDao = db.PwdDao()
 
+            // 插入新用户
+//            val newUser = Pwd(description = "抖音", passwd = "zhangsan@example.com")
+//            pwdDao.insert(newUser)
+
+            // 查询所有用户
+            val allpwds = pwdDao.getAll()
+            Log.e("Database", "用户列表: $allpwds")
         }
     }
     @Preview(showBackground = true)

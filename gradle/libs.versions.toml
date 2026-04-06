@@ -1,19 +1,22 @@
 [versions]
 agp = "9.1.0"
 composeBomVersion = "2024.10.00"
-coreKtx = "1.10.1"
+coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
-lifecycleRuntimeKtx = "2.6.1"
-activityCompose = "1.8.0"
-kotlin = "2.2.10"
+lifecycleRuntimeKtx = "2.9.0"
+activityCompose = "1.8.2"
+kotlin = "2.3.20"
 composeBom = "2024.09.00"
 lifecycleViewmodelCompose = "2.9.0"
 material3 = "1.4.0"
 materialIconsCore = "1.7.8"
 navigationCompose = "2.9.7"
 navigationRuntimeKtx = "2.9.7"
+roomCompiler = "2.7.1"
+roomRuntime = "2.7.1"
+roomKtx = "2.7.1"
 
 [libraries]
 androidx-compose-bom-v20241000 = { module = "androidx.compose:compose-bom", version.ref = "composeBomVersion" }
@@ -23,6 +26,9 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomCompiler" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomKtx" }
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomRuntime" }
 androidx-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
