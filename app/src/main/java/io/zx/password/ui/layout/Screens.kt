@@ -1,6 +1,7 @@
 package io.zx.password.ui.layout
 
 import android.annotation.SuppressLint
+import android.content.ClipData
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,11 +20,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.createFromAutofillValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,6 +86,7 @@ private fun HomeScaffold(
     items:List<Pwd>
 ){
     var slectedItem by remember { mutableStateOf<Pwd?>(null) }
+    val clipboard = LocalClipboardManager.current
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -113,7 +120,7 @@ private fun HomeScaffold(
 //                }
 //            }
             items(items, key={it.id}) {item ->
-                PwdItemCard(title = item.description, onClick = {slectedItem = item})
+                PwdItemCard(title = item.description, onEditClick = {slectedItem = item}, onCopyClick = {clipboard.setText(AnnotatedString(item.passwd))})
             }
 
             item {
@@ -128,8 +135,9 @@ private fun HomeScaffold(
         slectedItem?.let {
                 item -> EditPwdDialog(
             item = item,
-            onDismiss = {slectedItem = null},
-            onConfirm = { updated -> viewModel.updateItem(updated)}
+            onDismiss = { slectedItem = null },
+            onConfirm = { updated -> viewModel.updateItem(updated) },
+            onDelete = { delete -> viewModel.deleteItem(delete) }
         )
         }
     }
@@ -230,39 +238,49 @@ private fun IconTextCard(
 @Composable
 fun PwdItemCard(
     title: String,
-    onClick: () -> Unit
+    onCopyClick: () -> Unit,
+    onEditClick: () -> Unit
 ){
-    Card(modifier = Modifier.fillMaxSize(),onClick = onClick){
+//    SwipeableItem(modifier = Modifier.fillMaxSize(), onDelete = {}) {
+//        Card(modifier = Modifier.fillMaxSize()){
+//            Text(text = "text", modifier = Modifier.padding(16.dp))
+//        }
+//    }
+    Card(modifier = Modifier.fillMaxSize()/*,onClick = onClick*/){
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
 //            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            Spacer(modifier = Modifier.width(8.dp))
             Text(text = title, modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.width(16.dp))
-            Icon(
-                imageVector = Icons.Filled.ContentCopy,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(8.dp)
-                    .size(24.dp),
-                tint = MaterialTheme.colorScheme.primary,
-                contentDescription = null,
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Icon(
-                imageVector = Icons.Filled.Edit,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(8.dp)
-                    .size(24.dp),
-                tint = MaterialTheme.colorScheme.primary,
-                contentDescription = null,
-            )
+            IconButton(onClick = onEditClick) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(8.dp)
+                        .size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                    contentDescription = null,
+                )
+            }
+//            Spacer(modifier = Modifier.width(16.dp))
+            IconButton(onClick = onCopyClick) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(8.dp)
+                        .size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                    contentDescription = null,
+                )
+            }
         }
     }
 }
@@ -271,7 +289,8 @@ fun PwdItemCard(
 fun EditPwdDialog(
     item: Pwd,
     onDismiss: () -> Unit,
-    onConfirm: (Pwd) -> Unit
+    onConfirm: (Pwd) -> Unit,
+    onDelete: (Pwd) -> Unit
 ) {
     // 对话框内部状态，用于临时编辑
     var editedTitle by remember { mutableStateOf(item.description) }
@@ -297,20 +316,38 @@ fun EditPwdDialog(
                 )
             }
         },
-        confirmButton = {
+        // 左边：删除按钮（危险操作，用红色）
+        dismissButton = {
             TextButton(
                 onClick = {
-                    val updated = item.copy(description = editedTitle, passwd = editedContent)
-                    onConfirm(updated)
+                    onDelete(item)   // ← 你需要传入的删除回调
                     onDismiss()
-                }
+                },
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
             ) {
-                Text("保存")
+                Text("删除")
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
+        // 右边：取消 + 保存
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text("取消")
+                }
+                TextButton(
+                    onClick = {
+                        val updated = item.copy(
+                            description = editedTitle,
+                            passwd = editedContent
+                        )
+                        onConfirm(updated)
+                        onDismiss()
+                    }
+                ) {
+                    Text("保存")
+                }
             }
         }
     )
