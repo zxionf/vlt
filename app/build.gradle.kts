@@ -71,6 +71,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // 生物识别
+    implementation(libs.androidx.biometric)
+
     implementation(libs.androidx.compose.foundation)
 
     testImplementation(libs.junit)

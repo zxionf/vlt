@@ -13,6 +13,6 @@ class PwdItemCardTest {
     )
     @Composable
     fun PwdItemCardPreview(){
-        PwdItemCard(title = "标题", onClick = {})
+        PwdItemCard(title = "标题", onCopyClick = {}, onEditClick = {})
     }
 }

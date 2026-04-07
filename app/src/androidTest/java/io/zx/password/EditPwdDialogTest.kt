@@ -18,7 +18,8 @@ class EditPwdDialogTest {
         EditPwdDialog(
             item = mockItem,
             onDismiss = {},
-            onConfirm = {}
+            onConfirm = {},
+            onDelete = {}
         )
     }
 }

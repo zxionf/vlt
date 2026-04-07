@@ -1,7 +1,6 @@
 package io.zx.password.ui.layout
 
 import android.annotation.SuppressLint
-import android.content.ClipData
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -20,11 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.createFromAutofillValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.onClick
@@ -87,10 +84,12 @@ private fun HomeScaffold(
 ){
     var slectedItem by remember { mutableStateOf<Pwd?>(null) }
     val clipboard = LocalClipboardManager.current
+    var showinfo by remember { mutableStateOf<Boolean>(true) }
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(title = { Text(text = "PWD", style = MaterialTheme.typography.headlineSmall) },
+            TopAppBar(title = { Text(text = "PWD", style = MaterialTheme.typography.headlineSmall)
+                                Text(text = "hello", modifier = Modifier.padding(50.dp,0.dp))},
 //            colors = TopAppBarDefaults.topAppBarColors(
 //                containerColor = MaterialTheme.colorScheme.primary,        // 背景色
 //                titleContentColor = MaterialTheme.colorScheme.onPrimary,   // 标题颜色
@@ -101,7 +100,9 @@ private fun HomeScaffold(
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(16.dp)
         ) {
@@ -120,7 +121,12 @@ private fun HomeScaffold(
 //                }
 //            }
             items(items, key={it.id}) {item ->
-                PwdItemCard(title = item.description, onEditClick = {slectedItem = item}, onCopyClick = {clipboard.setText(AnnotatedString(item.passwd))})
+                PwdItemCard(
+                    title = item.description,
+                    onInfoClick = { showinfo = true; slectedItem = item },
+                    onEditClick = { showinfo = false; slectedItem = item },
+                    onCopyClick = {clipboard.setText(AnnotatedString(item.passwd))}
+                )
             }
 
             item {
@@ -132,14 +138,23 @@ private fun HomeScaffold(
             }
         }
 
-        slectedItem?.let {
-                item -> EditPwdDialog(
-            item = item,
-            onDismiss = { slectedItem = null },
-            onConfirm = { updated -> viewModel.updateItem(updated) },
-            onDelete = { delete -> viewModel.deleteItem(delete) }
-        )
+        when (showinfo){
+            true -> slectedItem?.let {
+                    item -> InfoDialog (
+                item = item,
+                onDismiss = { slectedItem = null },
+            )
+            }
+            else -> slectedItem?.let {
+                    item -> EditPwdDialog(
+                item = item,
+                onDismiss = { slectedItem = null },
+                onConfirm = { updated -> viewModel.updateItem(updated) },
+                onDelete = { delete -> viewModel.deleteItem(delete) }
+            )
+            }
         }
+
     }
 }
 
@@ -238,6 +253,7 @@ private fun IconTextCard(
 @Composable
 fun PwdItemCard(
     title: String,
+    onInfoClick: () -> Unit,
     onCopyClick: () -> Unit,
     onEditClick: () -> Unit
 ){
@@ -246,7 +262,7 @@ fun PwdItemCard(
 //            Text(text = "text", modifier = Modifier.padding(16.dp))
 //        }
 //    }
-    Card(modifier = Modifier.fillMaxSize()/*,onClick = onClick*/){
+    Card(modifier = Modifier.fillMaxSize()){
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -256,6 +272,18 @@ fun PwdItemCard(
         ) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = title, modifier = Modifier.weight(1f))
+            IconButton(onClick = onInfoClick) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(8.dp)
+                        .size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                    contentDescription = null,
+                )
+            }
             IconButton(onClick = onEditClick) {
                 Icon(
                     imageVector = Icons.Filled.Edit,
@@ -283,72 +311,4 @@ fun PwdItemCard(
             }
         }
     }
-}
-
-@Composable
-fun EditPwdDialog(
-    item: Pwd,
-    onDismiss: () -> Unit,
-    onConfirm: (Pwd) -> Unit,
-    onDelete: (Pwd) -> Unit
-) {
-    // 对话框内部状态，用于临时编辑
-    var editedTitle by remember { mutableStateOf(item.description) }
-    var editedContent by remember { mutableStateOf(item.passwd) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("编辑") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = editedTitle,
-                    onValueChange = { editedTitle = it },
-                    label = { Text("描述") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = editedContent,
-                    onValueChange = { editedContent = it },
-                    label = { Text("内容") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        // 左边：删除按钮（危险操作，用红色）
-        dismissButton = {
-            TextButton(
-                onClick = {
-                    onDelete(item)   // ← 你需要传入的删除回调
-                    onDismiss()
-                },
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text("删除")
-            }
-        },
-        // 右边：取消 + 保存
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onDismiss) {
-                    Text("取消")
-                }
-                TextButton(
-                    onClick = {
-                        val updated = item.copy(
-                            description = editedTitle,
-                            passwd = editedContent
-                        )
-                        onConfirm(updated)
-                        onDismiss()
-                    }
-                ) {
-                    Text("保存")
-                }
-            }
-        }
-    )
 }
