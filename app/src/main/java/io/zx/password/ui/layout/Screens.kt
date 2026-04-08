@@ -2,16 +2,40 @@ package io.zx.password.ui.layout
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -85,11 +109,20 @@ private fun HomeScaffold(
     var slectedItem by remember { mutableStateOf<Pwd?>(null) }
     val clipboard = LocalClipboardManager.current
     var showinfo by remember { mutableStateOf<Boolean>(true) }
+    var showHelp by remember { mutableStateOf<Boolean>(false) }
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(title = { Text(text = "PWD", style = MaterialTheme.typography.headlineSmall)
-                                Text(text = "hello", modifier = Modifier.padding(50.dp,0.dp))},
+            TopAppBar(
+                title = { Text(text = "PWD", style = MaterialTheme.typography.headlineSmall) },
+                actions = {
+                    IconButton(onClick = {  }) {
+                        Icon( imageVector = Icons.Default.DownloadForOffline, "update", modifier = Modifier.size(30.dp))
+                    }
+                    IconButton(onClick = { viewModel.addItem(Pwd( description = "test", passwd = "dddddd")) }) {
+                        Icon( imageVector = Icons.Default.Add, "add", modifier = Modifier.size(36.dp))
+                    }
+                },
 //            colors = TopAppBarDefaults.topAppBarColors(
 //                containerColor = MaterialTheme.colorScheme.primary,        // 背景色
 //                titleContentColor = MaterialTheme.colorScheme.onPrimary,   // 标题颜色
@@ -109,10 +142,10 @@ private fun HomeScaffold(
             item{
                 PwdItemIconCard(
                     title = "了解 PWD",
-                    subtitle = "查阅规则文档和常见问题",
+                    subtitle = "查看常见问题",
                     imageVector = Icons.AutoMirrored.Filled.Help,
                     onClickLabel = "打开 PWD 文档页面",
-                    onClick = { viewModel.addItem(Pwd( description = "test", passwd = "dddddd")) }
+                    onClick = { showHelp = true }
                 )
             }
 //            items(20) {
@@ -154,6 +187,8 @@ private fun HomeScaffold(
             )
             }
         }
+
+        if (showHelp) CommonDialog("提示","什么都没有",{showHelp = false})
 
     }
 }

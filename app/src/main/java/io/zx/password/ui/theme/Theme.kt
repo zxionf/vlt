@@ -73,7 +73,7 @@ private val LightColorScheme = lightColorScheme(
 
 // 在主题中定义具体颜色
 val LightExtendedColors = ExtendedColors(
-    primaryContainer = Color(0xFF000000),
+    primaryContainer = Color(0xFFEEEDF4),
     cardBackground = Color(0xFFF5F5F5),
     cardBorder = Color(0xFFE0E0E0),
     specialBackground = Color(0xFFFFE0B2),

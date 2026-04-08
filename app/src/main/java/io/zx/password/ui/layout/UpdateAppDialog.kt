@@ -5,17 +5,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import io.zx.password.Pwd
 
 @Composable
-fun InfoDialog(
-    item: Pwd,
+fun UpdateAppDialog(
+    title:String,
+    text:String,
     onDismiss: () -> Unit
 ) {
 
@@ -28,7 +29,7 @@ fun InfoDialog(
         )
     ) {
         // 自定义对话框内容
-        androidx.compose.material3.Card(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
@@ -36,11 +37,9 @@ fun InfoDialog(
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text("提示")
+                Text(title)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "" + item.id)
-                Text(text = item.description)
-                Text(text = item.passwd)
+                Text(text)
             }
         }
     }
