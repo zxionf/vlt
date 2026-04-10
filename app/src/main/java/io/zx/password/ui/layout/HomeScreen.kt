@@ -297,7 +297,12 @@ fun PwdItemCard(
 //            Text(text = "text", modifier = Modifier.padding(16.dp))
 //        }
 //    }
-    Card(modifier = Modifier.fillMaxSize()){
+    Card(
+        modifier = Modifier.fillMaxSize(),
+        colors = CardDefaults.cardColors(
+            containerColor = PwdTheme.colors.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+    ){
         Row(
             modifier = Modifier
                 .fillMaxWidth()

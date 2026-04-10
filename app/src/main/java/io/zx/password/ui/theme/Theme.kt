@@ -1,6 +1,5 @@
 package io.zx.password.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 
 // 定义扩展颜色类
 data class ExtendedColors(
+    val primary: Color,
     val primaryContainer: Color,
     val cardBackground: Color,
     val cardBorder: Color,
@@ -28,6 +28,7 @@ data class ExtendedColors(
 // 默认扩展颜色
 val LocalExtendedColors = staticCompositionLocalOf {
     ExtendedColors(
+        primary = Color.Unspecified,
         primaryContainer = Color.Unspecified,
         cardBackground = Color.Unspecified,
         cardBorder = Color.Unspecified,
@@ -73,6 +74,7 @@ private val LightColorScheme = lightColorScheme(
 
 // 在主题中定义具体颜色
 val LightExtendedColors = ExtendedColors(
+    primary = Color(0xFFE3E3EB),
     primaryContainer = Color(0xFFEEEDF4),
     cardBackground = Color(0xFFF5F5F5),
     cardBorder = Color(0xFFE0E0E0),
@@ -80,6 +82,7 @@ val LightExtendedColors = ExtendedColors(
     specialContent = Color(0xFFE65100)
 )
 val DarkExtendedColors = ExtendedColors(
+    primary = Color(0xFFE3E3EB),
     primaryContainer = Color(0xFF222222),
     cardBackground = Color(0xFF2C2C2C),
     cardBorder = Color(0xFF404040),
