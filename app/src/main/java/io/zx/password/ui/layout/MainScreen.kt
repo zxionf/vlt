@@ -1,5 +1,7 @@
 package io.zx.password.ui.layout
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -75,7 +77,7 @@ fun BottomNavigationBar(navController: NavController) {
                         // 避免重新创建已经存在的实例
                         launchSingleTop = true
                         // 恢复之前的状态
-                        restoreState = true
+                        restoreState = false
                     }
                 },
                 colors = NavigationBarItemDefaults.colors(
@@ -94,7 +96,11 @@ fun BottomNavigationBar(navController: NavController) {
 fun NavigationGraph(navController: NavHostController) {
     NavHost(
         navController = navController,
-        startDestination = BottomNavItem.Home.route
+        startDestination = BottomNavItem.Home.route,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
     ) {
         composable(BottomNavItem.Home.route) {
             HomeScreen()

@@ -58,6 +58,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.zx.password.Pwd
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
+import io.zx.password.ui.component.CommonDialog
+import io.zx.password.ui.component.EditPwdDialog
+import io.zx.password.ui.component.InfoDialog
 import io.zx.password.ui.theme.PwdTheme
 
 @SuppressLint("ViewModelConstructorInComposable")
@@ -173,49 +176,25 @@ private fun HomeScaffold(
 
         when (showinfo){
             true -> slectedItem?.let {
-                    item -> InfoDialog (
-                item = item,
-                onDismiss = { slectedItem = null },
-            )
+                    item ->
+                InfoDialog(
+                    item = item,
+                    onDismiss = { slectedItem = null },
+                )
             }
             else -> slectedItem?.let {
-                    item -> EditPwdDialog(
-                item = item,
-                onDismiss = { slectedItem = null },
-                onConfirm = { updated -> viewModel.updateItem(updated) },
-                onDelete = { delete -> viewModel.deleteItem(delete) }
-            )
+                    item ->
+                EditPwdDialog(
+                    item = item,
+                    onDismiss = { slectedItem = null },
+                    onConfirm = { updated -> viewModel.updateItem(updated) },
+                    onDelete = { delete -> viewModel.deleteItem(delete) }
+                )
             }
         }
 
-        if (showHelp) CommonDialog("提示","什么都没有",{showHelp = false})
+        if (showHelp) CommonDialog("提示", "什么都没有", { showHelp = false })
 
-    }
-}
-
-@Composable
-fun SearchScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "搜索页面",
-            style = MaterialTheme.typography.headlineMedium
-        )
-    }
-}
-
-@Composable
-fun SettingScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "设置页面",
-            style = MaterialTheme.typography.headlineMedium
-        )
     }
 }
 

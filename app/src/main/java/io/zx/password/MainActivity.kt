@@ -17,8 +17,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,7 +30,10 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import io.zx.password.ui.layout.MainScreen
+import io.zx.password.ui.theme.LocalThemeState
 import io.zx.password.ui.theme.PasswordTheme
+import io.zx.password.ui.theme.ThemePreferences
+import io.zx.password.ui.theme.rememberThemeState
 
 
 class MainViewModel : ViewModel() {
@@ -49,8 +54,12 @@ class MainActivity : FragmentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            PasswordTheme {
-                MainView()
+            val themePreferences = remember { ThemePreferences(this) }
+            val themeState = rememberThemeState(themePreferences)
+            CompositionLocalProvider(LocalThemeState provides themeState) {
+                PasswordTheme {
+                    MainView()
+                }
             }
         }
     }

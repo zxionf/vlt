@@ -3,7 +3,7 @@ package io.zx.password
 import android.R.color.black
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import io.zx.password.ui.layout.EditPwdDialog
+import io.zx.password.ui.component.EditPwdDialog
 
 class EditPwdDialogTest {
     @Preview(showBackground = true, backgroundColor = black.toLong())

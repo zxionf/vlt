@@ -1,4 +1,4 @@
-package io.zx.password.ui.layout
+package io.zx.password.ui.component
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background

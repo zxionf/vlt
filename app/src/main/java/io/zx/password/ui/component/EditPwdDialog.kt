@@ -1,4 +1,4 @@
-package io.zx.password.ui.layout
+package io.zx.password.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

@@ -74,6 +74,8 @@ dependencies {
     // 生物识别
     implementation(libs.androidx.biometric)
 
+    implementation(libs.androidx.datastore.preferences)
+
     implementation(libs.androidx.compose.foundation)
 
     testImplementation(libs.junit)
