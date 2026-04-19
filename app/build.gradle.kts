@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.foundation)
+    implementation(libs.androidx.compose.animation)
     // Compose 工具
     debugImplementation(libs.androidx.ui.tooling)
     // Activity 集成

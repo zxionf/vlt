@@ -1,7 +1,13 @@
 package io.zx.password.ui.layout
 
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -97,10 +104,10 @@ fun NavigationGraph(navController: NavHostController) {
     NavHost(
         navController = navController,
         startDestination = BottomNavItem.Home.route,
-        enterTransition = { EnterTransition.None },
-        exitTransition = { ExitTransition.None },
-        popEnterTransition = { EnterTransition.None },
-        popExitTransition = { ExitTransition.None }
+        enterTransition = { fadeIn(animationSpec = tween(durationMillis = 100)) },
+        exitTransition = { fadeOut(animationSpec = tween(durationMillis = 100)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 100)) },
+        popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 100)) },
     ) {
         composable(BottomNavItem.Home.route) {
             HomeScreen()
