@@ -33,19 +33,24 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.zx.password.PasswdEntity
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
+import io.zx.password.ui.component.PasswordDetailDialog
 
 @Composable
-fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))) {
+fun SearchScreen(
+    viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
+) {
     var searchText by remember { mutableStateOf("") }
+    var detailItem by remember { mutableStateOf<PasswdEntity?>(null) }
     val items by viewModel.items.collectAsStateWithLifecycle()
 
-    // 基于 title 和 username 搜索
     val searchResults = if (searchText.isBlank()) {
         null
     } else {
         items.filter {
             it.title.contains(searchText, ignoreCase = true) ||
-            it.username.contains(searchText, ignoreCase = true)
+            it.username.contains(searchText, ignoreCase = true) ||
+            it.url?.contains(searchText, ignoreCase = true) == true ||
+            it.notes?.contains(searchText, ignoreCase = true) == true
         }
     }
 
@@ -58,7 +63,7 @@ fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFacto
             value = searchText,
             onValueChange = { searchText = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("搜索账号或网站") },
+            placeholder = { Text("搜索标题、用户名、网址或备注") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
             singleLine = true,
             shape = MaterialTheme.shapes.medium
@@ -93,19 +98,39 @@ fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFacto
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(searchResults, key = { it.id }) { item ->
-                    SearchResultCard(item)
+                    SearchResultCard(
+                        item = item,
+                        onClick = { detailItem = item }
+                    )
                 }
             }
         }
     }
+
+    // 详情弹窗
+    detailItem?.let { item ->
+        PasswordDetailDialog(
+            item = item,
+            onDismiss = { detailItem = null },
+            onEdit = { detailItem = null },
+            onDelete = {
+                viewModel.deleteItem(it)
+                detailItem = null
+            }
+        )
+    }
 }
 
 @Composable
-private fun SearchResultCard(item: PasswdEntity) {
+private fun SearchResultCard(
+    item: PasswdEntity,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = MaterialTheme.shapes.medium
+        shape = MaterialTheme.shapes.medium,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier

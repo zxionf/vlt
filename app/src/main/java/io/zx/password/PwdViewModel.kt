@@ -30,6 +30,7 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
             repository.getAll().collect { itemList ->
                 Log.d("PwdViewModel", "Loaded ${itemList.size} items")
                 _uiState.value = UiState.Success(itemList)
+                _items.value = itemList
             }
         }
     }
