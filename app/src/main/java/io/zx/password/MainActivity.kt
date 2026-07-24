@@ -1,7 +1,6 @@
 package io.zx.password
 
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -29,7 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
 import io.zx.password.ui.layout.MainScreen
+import kotlinx.coroutines.launch
 import io.zx.password.ui.theme.LocalThemeState
 import io.zx.password.ui.theme.PasswordTheme
 import io.zx.password.ui.theme.ThemePreferences
@@ -39,8 +40,11 @@ import io.zx.password.ui.theme.rememberThemeState
 class MainViewModel : ViewModel() {
     var isUnlocked by mutableStateOf(false)
         private set
+    var autoLockEnabled by mutableStateOf(true)
     fun unlock() { isUnlocked = true }
-    fun lock() { isUnlocked = false }
+    fun lock() {
+        if (autoLockEnabled) isUnlocked = false
+    }
 }
 
 class MainActivity : FragmentActivity() {
@@ -50,7 +54,13 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-//        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        // 监听自动锁定偏好
+        val themePreferences = ThemePreferences(this)
+        lifecycleScope.launch {
+            themePreferences.autoLockEnabledFlow.collect { enabled ->
+                viewModel.autoLockEnabled = enabled
+            }
+        }
 
         enableEdgeToEdge()
         setContent {

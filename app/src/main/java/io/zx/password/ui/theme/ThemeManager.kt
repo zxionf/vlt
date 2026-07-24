@@ -7,8 +7,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -23,6 +25,7 @@ enum class ThemeMode{
 
 private val Context.dataStore by preferencesDataStore("theme_prefs")
 private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
+private val AUTO_LOCK_KEY = booleanPreferencesKey("auto_lock_enabled")
 
 class ThemePreferences(context: Context) {
     private val dataStore = context.dataStore
@@ -41,6 +44,16 @@ class ThemePreferences(context: Context) {
             prefs[THEME_MODE_KEY] = mode.name
         }
     }
+
+    val autoLockEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[AUTO_LOCK_KEY] ?: true // 默认开启
+    }
+
+    suspend fun saveAutoLockEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[AUTO_LOCK_KEY] = enabled
+        }
+    }
 }
 
 @Stable
@@ -56,7 +69,8 @@ val LocalThemeState = staticCompositionLocalOf<ThemeState> {
 @Composable
 fun rememberThemeState(themePreferences: ThemePreferences): ThemeState {
     var themeMode by remember { mutableStateOf(ThemeMode.FOLLOW_SYSTEM) }
-    // 初次加载读取保存的值（简化示例，实际建议用 Flow 收集）
+    val scope = rememberCoroutineScope()
+    // 初次加载读取保存的值
     androidx.compose.runtime.LaunchedEffect(Unit) {
         themeMode = themePreferences.themeModeFlow.firstOrNull() ?: ThemeMode.FOLLOW_SYSTEM
     }
@@ -64,8 +78,7 @@ fun rememberThemeState(themePreferences: ThemePreferences): ThemeState {
         themeMode = themeMode,
         onThemeModeChange = { newMode ->
             themeMode = newMode
-            // 异步保存，不阻塞UI
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            scope.launch {
                 themePreferences.saveThemeMode(newMode)
             }
         }

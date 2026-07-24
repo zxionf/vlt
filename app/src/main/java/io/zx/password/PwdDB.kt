@@ -16,13 +16,14 @@ abstract class PwdDB : RoomDatabase(){
 
         fun getInstance(context: Context): PwdDB {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+                INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     PwdDB::class.java,
-                    "passwd" // 数据库文件名
-                ).build()
-                INSTANCE = instance
-                instance
+                    "passwd"
+                )
+                    .fallbackToDestructiveMigration(false)
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }

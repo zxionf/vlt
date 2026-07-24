@@ -26,17 +26,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.zx.password.Pwd
+import io.zx.password.PwdViewModel
+import io.zx.password.PwdViewModelFactory
 
 @Composable
-fun SearchScreen() {
-    // 搜索关键词状态（仅用于 UI 展示，实际搜索逻辑可后续添加）
+fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))) {
     var searchText by remember { mutableStateOf("") }
+    val items by viewModel.items.collectAsStateWithLifecycle()
 
-    // 模拟搜索结果（实际应从 ViewModel 获取）
-    val searchResults = remember(searchText) {
-        if (searchText.isBlank()) emptyList()
-        else sampleItems.filter { it.title.contains(searchText, ignoreCase = true) }
+    // 基于 description 字段搜索
+    val searchResults = if (searchText.isBlank()) {
+        null // null 表示未开始搜索
+    } else {
+        items.filter { it.description.contains(searchText, ignoreCase = true) }
     }
 
     Column(
@@ -44,7 +51,6 @@ fun SearchScreen() {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // 搜索框
         OutlinedTextField(
             value = searchText,
             onValueChange = { searchText = it },
@@ -57,9 +63,7 @@ fun SearchScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 搜索结果列表
         if (searchText.isBlank()) {
-            // 未输入时显示提示
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -70,8 +74,7 @@ fun SearchScreen() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        } else if (searchResults.isEmpty()) {
-            // 无结果提示
+        } else if (searchResults.isNullOrEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -83,12 +86,11 @@ fun SearchScreen() {
                 )
             }
         } else {
-            // 显示结果列表
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(searchResults) { item ->
-                    PasswordItemCard(item)
+                items(searchResults, key = { it.id }) { item ->
+                    SearchResultCard(item)
                 }
             }
         }
@@ -96,7 +98,7 @@ fun SearchScreen() {
 }
 
 @Composable
-private fun PasswordItemCard(item: PasswordItem) {
+private fun SearchResultCard(item: Pwd) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -112,33 +114,17 @@ private fun PasswordItemCard(item: PasswordItem) {
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = item.title,
+                    text = item.description,
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = item.username,
+                    text = item.passwd,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
                 )
             }
-            // 可在此添加操作图标（如复制、删除），根据需要添加
-            // Icon(Icons.Default.MoreVert, contentDescription = null)
         }
     }
 }
-
-// 模拟数据类（实际应放在 domain 层）
-private data class PasswordItem(
-    val title: String,      // 网站或应用名称
-    val username: String    // 账号
-)
-
-// 模拟数据源
-private val sampleItems = listOf(
-    PasswordItem("Google", "user@gmail.com"),
-    PasswordItem("GitHub", "my_github_handle"),
-    PasswordItem("Outlook", "work@outlook.com"),
-    PasswordItem("Netflix", "family@netflix.com"),
-    PasswordItem("Spotify", "premium_user")
-)

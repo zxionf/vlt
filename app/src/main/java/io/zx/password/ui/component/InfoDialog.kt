@@ -19,16 +19,14 @@ fun InfoDialog(
     item: Pwd,
     onDismiss: () -> Unit
 ) {
-
     Dialog(
-        onDismissRequest = onDismiss,  // 必须提供这个参数
+        onDismissRequest = onDismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
             dismissOnClickOutside = true,
             usePlatformDefaultWidth = true
         )
     ) {
-        // 自定义对话框内容
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -39,9 +37,9 @@ fun InfoDialog(
             ) {
                 Text("提示")
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "" + item.id)
-                Text(text = item.description)
-                Text(text = item.passwd)
+                Text(text = "ID: ${item.id}")
+                Text(text = "描述: ${item.description}")
+                Text(text = "密码: ${item.passwd}")
             }
         }
     }

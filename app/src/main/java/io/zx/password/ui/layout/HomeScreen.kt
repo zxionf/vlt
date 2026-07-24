@@ -100,7 +100,6 @@ fun HomeScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory
     }
 
     val items by viewModel.items.collectAsState()
-    var i:Int=0
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -126,12 +125,6 @@ private fun HomeScaffold(
                         Icon( imageVector = Icons.Default.Add, "add", modifier = Modifier.size(36.dp))
                     }
                 },
-//            colors = TopAppBarDefaults.topAppBarColors(
-//                containerColor = MaterialTheme.colorScheme.primary,        // 背景色
-//                titleContentColor = MaterialTheme.colorScheme.onPrimary,   // 标题颜色
-//                navigationIconContentColor = MaterialTheme.colorScheme.onPrimary, // 导航图标颜色
-//                actionIconContentColor = MaterialTheme.colorScheme.onPrimary     // 操作图标颜色
-//            ),
                 windowInsets = WindowInsets(0, 0, 0, 0))
         }
     ) { innerPadding ->
@@ -161,7 +154,7 @@ private fun HomeScaffold(
                     title = item.description,
                     onInfoClick = { showinfo = true; slectedItem = item },
                     onEditClick = { showinfo = false; slectedItem = item },
-                    onCopyClick = {clipboard.setText(AnnotatedString(item.passwd))}
+                    onCopyClick = { clipboard.setText(AnnotatedString(item.passwd)) }
                 )
             }
 
@@ -271,11 +264,6 @@ fun PwdItemCard(
     onCopyClick: () -> Unit,
     onEditClick: () -> Unit
 ){
-//    SwipeableItem(modifier = Modifier.fillMaxSize(), onDelete = {}) {
-//        Card(modifier = Modifier.fillMaxSize()){
-//            Text(text = "text", modifier = Modifier.padding(16.dp))
-//        }
-//    }
     Card(
         modifier = Modifier.fillMaxSize(),
         colors = CardDefaults.cardColors(

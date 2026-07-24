@@ -29,20 +29,33 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.zx.password.ui.theme.LocalThemeState
 import io.zx.password.ui.theme.ThemeMode
+import io.zx.password.ui.theme.ThemePreferences
 import io.zx.password.ui.theme.ThemeState
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingScreen() {
+    val context = LocalContext.current
+    val themePreferences = remember { ThemePreferences(context) }
+    val scope = rememberCoroutineScope()
     var autoLockEnabled by remember { mutableStateOf(true) }
     val themeState = LocalThemeState.current
+
+    // 读取保存的自动锁定偏好
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        autoLockEnabled = themePreferences.autoLockEnabledFlow.firstOrNull() ?: true
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -74,7 +87,10 @@ fun SettingScreen() {
             trailing = {
                 Switch(
                     checked = autoLockEnabled,
-                    onCheckedChange = { autoLockEnabled = it }
+                    onCheckedChange = {
+                        autoLockEnabled = it
+                        scope.launch { themePreferences.saveAutoLockEnabled(it) }
+                    }
                 )
             }
         )
