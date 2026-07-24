@@ -22,13 +22,15 @@ import kotlinx.coroutines.launch
 @Composable
 fun CreatePasswordScreen(
     onBack: () -> Unit,
+    editItem: PasswdEntity? = null,
     viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
 ) {
-    var title by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var passwd by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
+    val isEdit = editItem != null
+    var title by remember { mutableStateOf(editItem?.title ?: "") }
+    var username by remember { mutableStateOf(editItem?.username ?: "") }
+    var passwd by remember { mutableStateOf(editItem?.passwd ?: "") }
+    var url by remember { mutableStateOf(editItem?.url ?: "") }
+    var notes by remember { mutableStateOf(editItem?.notes ?: "") }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -37,17 +39,30 @@ fun CreatePasswordScreen(
             scope.launch { snackbarHostState.showSnackbar("标题和密码不能为空") }
             return
         }
-        viewModel.addItem(
-            PasswdEntity(
-                title = title.trim(),
-                username = username.trim(),
-                encryptedPasswd = "",
-                iv = "",
-                passwd = passwd,
-                url = url.trim().ifBlank { null },
-                notes = notes.trim().ifBlank { null }
+        if (isEdit) {
+            viewModel.updateItem(
+                editItem!!.copy(
+                    title = title.trim(),
+                    username = username.trim(),
+                    passwd = passwd,
+                    url = url.trim().ifBlank { null },
+                    notes = notes.trim().ifBlank { null },
+                    updatedAt = System.currentTimeMillis()
+                )
             )
-        )
+        } else {
+            viewModel.addItem(
+                PasswdEntity(
+                    title = title.trim(),
+                    username = username.trim(),
+                    encryptedPasswd = "",
+                    iv = "",
+                    passwd = passwd,
+                    url = url.trim().ifBlank { null },
+                    notes = notes.trim().ifBlank { null }
+                )
+            )
+        }
         onBack()
     }
 
@@ -55,7 +70,7 @@ fun CreatePasswordScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("新建记录") },
+                title = { Text(if (isEdit) "编辑记录" else "新建记录") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
