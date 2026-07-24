@@ -13,10 +13,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import io.zx.password.PasswdEntity
 import kotlinx.coroutines.delay
 
@@ -28,6 +33,42 @@ fun PasswordDetailDialog(
     onDelete: (PasswdEntity) -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    fun authenticateThenDelete() {
+        val activity = context as FragmentActivity
+        val biometricManager = BiometricManager.from(activity)
+        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            != BiometricManager.BIOMETRIC_SUCCESS
+        ) {
+            // 设备不支持或无生物特征，直接删除（降级处理）
+            onDelete(item)
+            onDismiss()
+            return
+        }
+        val executor = ContextCompat.getMainExecutor(activity)
+        val prompt = BiometricPrompt(
+            activity, executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    onDelete(item)
+                    onDismiss()
+                }
+                override fun onAuthenticationFailed() { /* 验证失败，不做删除 */ }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) { /* 出错 */ }
+            }
+        )
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            .setTitle("验证身份")
+            .setSubtitle("删除需要验证身份")
+            .setDescription("请使用指纹或人脸验证")
+            .build()
+        prompt.authenticate(info)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -82,10 +123,7 @@ fun PasswordDetailDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 TextButton(
-                    onClick = {
-                        onDelete(item)
-                        onDismiss()
-                    },
+                    onClick = { authenticateThenDelete() },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
