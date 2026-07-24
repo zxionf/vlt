@@ -30,7 +30,8 @@ fun PasswordDetailDialog(
     item: PasswdEntity,
     onDismiss: () -> Unit,
     onEdit: (PasswdEntity) -> Unit,
-    onDelete: (PasswdEntity) -> Unit
+    onDelete: (PasswdEntity) -> Unit,
+    tags: List<String> = emptyList()
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
@@ -108,6 +109,21 @@ fun PasswordDetailDialog(
                 }
                 DetailField("创建时间", formatTimestamp(item.createdAt)) {}
                 DetailField("更新时间", formatTimestamp(item.updatedAt)) {}
+
+                if (tags.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        tags.forEach { tag ->
+                            SuggestionChip(
+                                onClick = { },
+                                label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(20.dp))
 

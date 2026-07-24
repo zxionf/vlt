@@ -5,9 +5,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -34,6 +37,23 @@ fun CreatePasswordScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // 标签
+    var tagList by remember { mutableStateOf<List<String>>(emptyList()) }
+    var tagInput by remember { mutableStateOf("") }
+
+    // 编辑模式加载已有标签
+    LaunchedEffect(editItem) {
+        if (editItem != null) {
+            viewModel.tagMap.collect { map ->
+                val tags = map[editItem.id]
+                if (tags != null) {
+                    tagList = tags.map { it.name }
+                }
+                return@collect
+            }
+        }
+    }
+
     fun save() {
         if (title.isBlank() || passwd.isBlank()) {
             scope.launch { snackbarHostState.showSnackbar("标题和密码不能为空") }
@@ -50,6 +70,7 @@ fun CreatePasswordScreen(
                     updatedAt = System.currentTimeMillis()
                 )
             )
+            viewModel.setTagsForPassword(editItem.id, tagList)
         } else {
             viewModel.addItem(
                 PasswdEntity(
@@ -141,6 +162,54 @@ fun CreatePasswordScreen(
                 minLines = 2,
                 maxLines = 5
             )
+
+            // 标签
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("标签", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (tagList.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    tagList.forEach { tag ->
+                        InputChip(
+                            selected = false,
+                            onClick = { },
+                            label = { Text(tag) },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { tagList = tagList.filter { it != tag } },
+                                    modifier = Modifier.size(16.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "删除标签", modifier = Modifier.size(12.dp))
+                                }
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = tagInput,
+                    onValueChange = { tagInput = it },
+                    placeholder = { Text("添加标签") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                IconButton(onClick = {
+                    val trimmed = tagInput.trim()
+                    if (trimmed.isNotBlank() && trimmed !in tagList) {
+                        tagList = tagList + trimmed
+                        tagInput = ""
+                    }
+                }) {
+                    Icon(Icons.Default.Add, contentDescription = "添加标签")
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

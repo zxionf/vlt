@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,15 +43,18 @@ fun SearchScreen(
     var searchText by remember { mutableStateOf("") }
     var detailItem by remember { mutableStateOf<PasswdEntity?>(null) }
     val items by viewModel.items.collectAsStateWithLifecycle()
+    val tagMap by viewModel.tagMap.collectAsState()
 
     val searchResults = if (searchText.isBlank()) {
         null
     } else {
-        items.filter {
-            it.title.contains(searchText, ignoreCase = true) ||
-            it.username.contains(searchText, ignoreCase = true) ||
-            it.url?.contains(searchText, ignoreCase = true) == true ||
-            it.notes?.contains(searchText, ignoreCase = true) == true
+        items.filter { entity ->
+            val matchesTags = tagMap[entity.id]?.any { tag -> tag.name.contains(searchText, ignoreCase = true) } == true
+            entity.title.contains(searchText, ignoreCase = true) ||
+            entity.username.contains(searchText, ignoreCase = true) ||
+            entity.url?.contains(searchText, ignoreCase = true) == true ||
+            entity.notes?.contains(searchText, ignoreCase = true) == true ||
+            matchesTags
         }
     }
 
@@ -116,7 +120,8 @@ fun SearchScreen(
             onDelete = {
                 viewModel.deleteItem(it)
                 detailItem = null
-            }
+            },
+            tags = tagMap[item.id]?.map { it.name } ?: emptyList()
         )
     }
 }

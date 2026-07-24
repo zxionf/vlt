@@ -8,8 +8,9 @@ class PwdViewModelFactory(private val context: Context) : ViewModelProvider.Fact
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(PwdViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
+            val db = PwdDB.getInstance(context)
             return PwdViewModel(
-                PwdRepository(PwdDB.getInstance(context).PwdDao())
+                PwdRepository(db.PwdDao(), db.TagDao())
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

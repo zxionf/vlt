@@ -21,8 +21,17 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
     val items: StateFlow<List<PasswdEntity>> = _items.asStateFlow()
 
+    // Tags
+    private val _allTags = MutableStateFlow<List<Tag>>(emptyList())
+    val allTags: StateFlow<List<Tag>> = _allTags.asStateFlow()
+
+    // Map of passwordId -> tags
+    private val _tagMap = MutableStateFlow<Map<Long, List<Tag>>>(emptyMap())
+    val tagMap: StateFlow<Map<Long, List<Tag>>> = _tagMap.asStateFlow()
+
     init {
         loadItems()
+        loadTags()
     }
 
     private fun loadItems() {
@@ -35,21 +44,64 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
         }
     }
 
-    fun updateItem(updatedItem: PasswdEntity) {
+    private fun loadTags() {
         viewModelScope.launch {
-            repository.update(updatedItem)
+            repository.getAllTags().collect { tags ->
+                _allTags.value = tags
+                refreshTagMap()
+            }
         }
     }
 
-    fun addItem(newItem: PasswdEntity) {
+    private fun refreshTagMap() {
         viewModelScope.launch {
-            repository.insert(newItem)
+            val map = mutableMapOf<Long, List<Tag>>()
+            for (item in _items.value) {
+                repository.getTagsForPassword(item.id).collect { tags ->
+                    map[item.id] = tags
+                    _tagMap.value = map.toMap()
+                    return@collect
+                }
+            }
         }
+    }
+
+    // Password CRUD
+    fun updateItem(updatedItem: PasswdEntity) {
+        viewModelScope.launch { repository.update(updatedItem) }
+    }
+
+    fun addItem(newItem: PasswdEntity) {
+        viewModelScope.launch { repository.insert(newItem) }
     }
 
     fun deleteItem(which: PasswdEntity) {
         viewModelScope.launch {
+            repository.deleteJoinsForPassword(which.id)
             repository.delete(which)
+        }
+    }
+
+    // Tag operations
+    fun addTagToPassword(passwdId: Long, tagName: String) {
+        viewModelScope.launch {
+            val tag = repository.insertTag(tagName)
+            repository.addTagToPassword(passwdId, tag.id)
+            refreshTagMap()
+        }
+    }
+
+    fun removeTagFromPassword(passwdId: Long, tagId: Long) {
+        viewModelScope.launch {
+            repository.removeTagFromPassword(passwdId, tagId)
+            refreshTagMap()
+        }
+    }
+
+    fun setTagsForPassword(passwdId: Long, tagNames: List<String>) {
+        viewModelScope.launch {
+            repository.setTagsForPassword(passwdId, tagNames)
+            refreshTagMap()
         }
     }
 }

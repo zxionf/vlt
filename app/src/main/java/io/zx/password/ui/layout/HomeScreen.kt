@@ -151,6 +151,7 @@ private fun HomeScaffold(
             }
         }
 
+        val tagMap by viewModel.tagMap.collectAsState()
         detailItem?.let { item ->
             PasswordDetailDialog(
                 item = item,
@@ -161,7 +162,8 @@ private fun HomeScaffold(
                 },
                 onDelete = { deleteItem ->
                     viewModel.deleteItem(deleteItem)
-                }
+                },
+                tags = tagMap[item.id]?.map { it.name } ?: emptyList()
             )
         }
 
