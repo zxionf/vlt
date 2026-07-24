@@ -10,54 +10,43 @@ import kotlinx.coroutines.launch
 
 class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
 
-    sealed class UiState{
+    sealed class UiState {
         object Loading : UiState()
-        data class Success(val items: List<Pwd>) : UiState()
+        data class Success(val items: List<PasswdEntity>) : UiState()
         data class Error(val message: String) : UiState()
     }
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
-    private val _items = MutableStateFlow<List<Pwd>>(emptyList())
-    val uiState : StateFlow<UiState> = _uiState.asStateFlow()
-    val items : StateFlow<List<Pwd>> = _items.asStateFlow()
+    private val _items = MutableStateFlow<List<PasswdEntity>>(emptyList())
+    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    val items: StateFlow<List<PasswdEntity>> = _items.asStateFlow()
 
     init {
         loadItems()
     }
 
-    private fun loadItems(){
+    private fun loadItems() {
         viewModelScope.launch {
             repository.getAll().collect { itemList ->
-                // debug
                 Log.d("PwdViewModel", "Loaded ${itemList.size} items")
-                itemList.forEach { item ->
-                    Log.d("PwdViewModel", "Item: $item")
-                }
-
                 _uiState.value = UiState.Success(itemList)
             }
         }
     }
 
-    fun updateItem(updatedItem: Pwd) {
+    fun updateItem(updatedItem: PasswdEntity) {
         viewModelScope.launch {
             repository.update(updatedItem)
         }
-//        _items.update { list ->
-//            list.map { if (it.id == updatedItem.id) updatedItem else it }
-//        }
     }
 
-    fun addItem(newItem: Pwd) {
-//        _items.update { list -> list + newItem }
+    fun addItem(newItem: PasswdEntity) {
         viewModelScope.launch {
             repository.insert(newItem)
-            // 由于 getAllItems() 返回的是 Flow，插入后数据库会发出新数据，
-            // loadItems 中的 collect 会自动收到，UI 会自动更新。
         }
     }
 
-    fun deleteItem(which: Pwd) {
+    fun deleteItem(which: PasswdEntity) {
         viewModelScope.launch {
             repository.delete(which)
         }

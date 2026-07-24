@@ -12,11 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import io.zx.password.Pwd
+import io.zx.password.PasswdEntity
 
 @Composable
 fun InfoDialog(
-    item: Pwd,
+    item: PasswdEntity,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -38,8 +38,11 @@ fun InfoDialog(
                 Text("提示")
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = "ID: ${item.id}")
-                Text(text = "描述: ${item.description}")
+                Text(text = "标题: ${item.title}")
+                Text(text = "用户名: ${item.username}")
                 Text(text = "密码: ${item.passwd}")
+                if (!item.notes.isNullOrBlank()) Text(text = "备注: ${item.notes}")
+                if (!item.url.isNullOrBlank()) Text(text = "网址: ${item.url}")
             }
         }
     }

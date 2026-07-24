@@ -36,9 +36,15 @@ import androidx.navigation.compose.rememberNavController
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
-        bottomBar = { BottomNavigationBar(navController) }
+        bottomBar = {
+            if (currentRoute in listOf("home", "search", "setting")) {
+                BottomNavigationBar(navController)
+            }
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -110,7 +116,10 @@ fun NavigationGraph(navController: NavHostController) {
         popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 100)) },
     ) {
         composable(BottomNavItem.Home.route) {
-            HomeScreen()
+            HomeScreen(onAddClick = { navController.navigate("create_password") })
+        }
+        composable("create_password") {
+            CreatePasswordScreen(onBack = { navController.popBackStack() })
         }
         composable(BottomNavItem.Search.route) {
             SearchScreen()

@@ -19,17 +19,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import io.zx.password.Pwd
+import io.zx.password.PasswdEntity
 
 @Composable
 fun EditPwdDialog(
-    item: Pwd,
+    item: PasswdEntity,
     onDismiss: () -> Unit,
-    onConfirm: (Pwd) -> Unit,
-    onDelete: (Pwd) -> Unit
+    onConfirm: (PasswdEntity) -> Unit,
+    onDelete: (PasswdEntity) -> Unit
 ) {
     // 对话框内部状态，用于临时编辑
-    var editedTitle by remember { mutableStateOf(item.description) }
+    var editedTitle by remember { mutableStateOf(item.title) }
     var editedContent by remember { mutableStateOf(item.passwd) }
 
     AlertDialog(
@@ -75,7 +75,7 @@ fun EditPwdDialog(
                 TextButton(
                     onClick = {
                         val updated = item.copy(
-                            description = editedTitle,
+                            title = editedTitle,
                             passwd = editedContent
                         )
                         onConfirm(updated)

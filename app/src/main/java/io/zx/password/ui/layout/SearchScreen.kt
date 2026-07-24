@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.zx.password.Pwd
+import io.zx.password.PasswdEntity
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
 
@@ -39,11 +39,14 @@ fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFacto
     var searchText by remember { mutableStateOf("") }
     val items by viewModel.items.collectAsStateWithLifecycle()
 
-    // 基于 description 字段搜索
+    // 基于 title 和 username 搜索
     val searchResults = if (searchText.isBlank()) {
-        null // null 表示未开始搜索
+        null
     } else {
-        items.filter { it.description.contains(searchText, ignoreCase = true) }
+        items.filter {
+            it.title.contains(searchText, ignoreCase = true) ||
+            it.username.contains(searchText, ignoreCase = true)
+        }
     }
 
     Column(
@@ -98,7 +101,7 @@ fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFacto
 }
 
 @Composable
-private fun SearchResultCard(item: Pwd) {
+private fun SearchResultCard(item: PasswdEntity) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -114,12 +117,12 @@ private fun SearchResultCard(item: Pwd) {
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = item.description,
+                    text = item.title,
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = item.passwd,
+                    text = item.username,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
