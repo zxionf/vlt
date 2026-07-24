@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.BrightnessMedium
@@ -25,6 +27,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +43,10 @@ import io.zx.password.ui.theme.LocalThemeState
 import io.zx.password.ui.theme.ThemeMode
 import io.zx.password.ui.theme.ThemePreferences
 import io.zx.password.ui.theme.ThemeState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import io.zx.password.PwdViewModelFactory
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
@@ -95,7 +102,80 @@ fun SettingScreen() {
             }
         )
 
-        // 可以继续添加更多设置项...
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 数据库调试
+        var showDbDebug by remember { mutableStateOf(false) }
+        val dbViewModel: io.zx.password.PwdViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+            factory = io.zx.password.PwdViewModelFactory(context)
+        )
+        val dbItems by dbViewModel.items.collectAsStateWithLifecycle()
+        val dbAllTags by dbViewModel.allTags.collectAsStateWithLifecycle()
+        val dbTagMap by dbViewModel.tagMap.collectAsStateWithLifecycle()
+
+        SettingItem(
+            icon = Icons.Default.UnfoldMore,
+            title = "数据库调试",
+            subtitle = "查看所有表数据",
+            trailing = { },
+            onClick = { showDbDebug = true }
+        )
+
+        if (showDbDebug) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showDbDebug = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    shape = MaterialTheme.shapes.large
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())
+                    ) {
+                        Text("数据库调试", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text("passwd 表 (${dbItems.size} 条)", style = MaterialTheme.typography.titleMedium)
+                        dbItems.forEach { item ->
+                            Text(
+                                "  ID:${item.id} | ${item.title} | ${item.username}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("tags 表 (${dbAllTags.size} 条)", style = MaterialTheme.typography.titleMedium)
+                        dbAllTags.forEach { tag ->
+                            Text(
+                                "  ID:${tag.id} | ${tag.name}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("password_tag_join", style = MaterialTheme.typography.titleMedium)
+                        dbItems.forEach { item ->
+                            val tags = dbTagMap[item.id] ?: emptyList()
+                            if (tags.isNotEmpty()) {
+                                Text(
+                                    "  passwdId:${item.id} → ${tags.joinToString(", ") { "${it.id}:${it.name}" }}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        TextButton(onClick = { showDbDebug = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("关闭")
+                        }
+                    }
+                }
+            }
+        }
 
     }
 }
@@ -105,10 +185,11 @@ private fun SettingItem(
     icon: ImageVector,
     title: String,
     subtitle: String? = null,
-    trailing: @Composable () -> Unit = {}
+    trailing: @Composable () -> Unit = {},
+    onClick: (() -> Unit)? = null
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().let { if (onClick != null) it.clickable { onClick() } else it },
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = MaterialTheme.shapes.medium
     ) {

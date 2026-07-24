@@ -19,6 +19,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.zx.password.PasswdEntity
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
+import io.zx.password.crypto.CryptoManager
+import io.zx.password.crypto.CryptoSession
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,9 +33,23 @@ fun CreatePasswordScreen(
     val isEdit = editItem != null
     var title by remember { mutableStateOf(editItem?.title ?: "") }
     var username by remember { mutableStateOf(editItem?.username ?: "") }
-    var passwd by remember { mutableStateOf(editItem?.passwd ?: "") }
+    var passwd by remember {
+        mutableStateOf(
+            if (editItem != null) {
+                try { CryptoSession.decrypt(editItem.iv, editItem.encryptedPasswd) } catch (e: Exception) { "" }
+            } else ""
+        )
+    }
     var url by remember { mutableStateOf(editItem?.url ?: "") }
-    var notes by remember { mutableStateOf(editItem?.notes ?: "") }
+    var notes by remember {
+        mutableStateOf(
+            editItem?.notes?.let { enc ->
+                val parts = enc.split(":", limit = 2)
+                if (parts.size == 2) try { CryptoSession.decrypt(parts[0], parts[1]) } catch (e: Exception) { "" }
+                else enc
+            } ?: ""
+        )
+    }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -59,14 +75,22 @@ fun CreatePasswordScreen(
             scope.launch { snackbarHostState.showSnackbar("标题和密码不能为空") }
             return
         }
+        val encPasswd = CryptoSession.encrypt(passwd)
+        val encNotes = if (notes.isNotBlank()) CryptoSession.encrypt(notes) else null
+        val encryptedPasswdStr = "${CryptoManager.bytesToBase64(encPasswd.iv)}:${CryptoManager.bytesToBase64(encPasswd.ciphertext)}"
+        val encryptedNotesStr = encNotes?.let {
+            "${CryptoManager.bytesToBase64(it.iv)}:${CryptoManager.bytesToBase64(it.ciphertext)}"
+        }
+
         if (isEdit) {
             viewModel.updateItem(
                 editItem!!.copy(
                     title = title.trim(),
                     username = username.trim(),
-                    passwd = passwd,
+                    encryptedPasswd = encryptedPasswdStr,
+                    iv = CryptoManager.bytesToBase64(encPasswd.iv),
+                    notes = encryptedNotesStr,
                     url = url.trim().ifBlank { null },
-                    notes = notes.trim().ifBlank { null },
                     updatedAt = System.currentTimeMillis()
                 )
             )
@@ -76,11 +100,10 @@ fun CreatePasswordScreen(
                 PasswdEntity(
                     title = title.trim(),
                     username = username.trim(),
-                    encryptedPasswd = "",
-                    iv = "",
-                    passwd = passwd,
-                    url = url.trim().ifBlank { null },
-                    notes = notes.trim().ifBlank { null }
+                    encryptedPasswd = encryptedPasswdStr,
+                    iv = CryptoManager.bytesToBase64(encPasswd.iv),
+                    notes = encryptedNotesStr,
+                    url = url.trim().ifBlank { null }
                 )
             )
         }

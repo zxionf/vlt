@@ -23,6 +23,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import io.zx.password.PasswdEntity
+import io.zx.password.crypto.CryptoSession
 import kotlinx.coroutines.delay
 
 @Composable
@@ -35,6 +36,16 @@ fun PasswordDetailDialog(
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    val decryptedPasswd = remember(item.encryptedPasswd, item.iv) {
+        try { CryptoSession.decrypt(item.iv, item.encryptedPasswd) } catch (e: Exception) { "[解密失败]" }
+    }
+    val decryptedNotes = remember(item.notes) {
+        item.notes?.let { notes ->
+            val parts = notes.split(":", limit = 2)
+            if (parts.size == 2) try { CryptoSession.decrypt(parts[0], parts[1]) } catch (e: Exception) { "[解密失败]" }
+            else notes
+        }
+    }
 
     fun authenticateThenDelete() {
         val activity = context as FragmentActivity
@@ -98,14 +109,14 @@ fun PasswordDetailDialog(
                 DetailField("用户名", item.username) {
                     clipboard.setText(AnnotatedString(item.username))
                 }
-                DetailField("密码", item.passwd) {
-                    clipboard.setText(AnnotatedString(item.passwd))
+                DetailField("密码", decryptedPasswd) {
+                    clipboard.setText(AnnotatedString(decryptedPasswd))
                 }
                 if (!item.url.isNullOrBlank()) DetailField("网址", item.url) {
                     clipboard.setText(AnnotatedString(item.url!!))
                 }
-                if (!item.notes.isNullOrBlank()) DetailField("备注", item.notes) {
-                    clipboard.setText(AnnotatedString(item.notes!!))
+                if (!decryptedNotes.isNullOrBlank()) DetailField("备注", decryptedNotes) {
+                    clipboard.setText(AnnotatedString(decryptedNotes!!))
                 }
                 DetailField("创建时间", formatTimestamp(item.createdAt)) {}
                 DetailField("更新时间", formatTimestamp(item.updatedAt)) {}

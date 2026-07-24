@@ -8,7 +8,6 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "passwd",
     indices = [
-        // category index removed - no category field in entity,
         Index(value = ["title"]),
         Index(value = ["createdAt"])
     ]
@@ -16,13 +15,12 @@ import androidx.room.PrimaryKey
 data class PasswdEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val title :String,
-    val username : String,
-    val encryptedPasswd :String,
-    val iv : String,
-    val notes :String? = null,
-    val url : String? = null,
-    val passwd: String,
+    val title: String,
+    val username: String,
+    val encryptedPasswd: String,
+    val iv: String,
+    val notes: String? = null,
+    val url: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -30,8 +28,8 @@ data class PasswdEntity(
 @Entity(tableName = "tags")
 data class Tag(
     @PrimaryKey(autoGenerate = true)
-    val id:Long = 0,
-    val name :String
+    val id: Long = 0,
+    val name: String
 )
 
 @Entity(
@@ -46,4 +44,17 @@ data class Tag(
 data class PasswordTagJoin(
     val passwdId: Long,
     val tagId: Long
+)
+
+@Entity(tableName = "key_pair")
+data class KeyPairEntity(
+    @PrimaryKey
+    val id: Int = 1,
+    val publicKey: String,
+    val salt: String,
+    val magicTextIv: String,
+    val magicTextCipher: String,
+    val encryptedPrivateKey: String,
+    val privateKeyIv: String,
+    val passwordHint: String
 )

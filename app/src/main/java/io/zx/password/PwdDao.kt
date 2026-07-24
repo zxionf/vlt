@@ -51,3 +51,12 @@ interface TagDao {
     """)
     fun getTagsForPassword(passwdId: Long): Flow<List<Tag>>
 }
+
+@Dao
+interface KeyPairDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: KeyPairEntity)
+
+    @Query("SELECT * FROM key_pair WHERE id = 1")
+    suspend fun get(): KeyPairEntity?
+}
