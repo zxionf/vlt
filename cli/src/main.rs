@@ -13,6 +13,10 @@ struct Cli {
     #[arg(short = 'D', long, default_value = ".")]
     db: PathBuf,
 
+    /// 服务器地址
+    #[arg(short = 's', long = "server", default_value = "")]
+    server: String,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -24,53 +28,34 @@ enum Commands {
 
     /// 添加密码记录
     Add {
-        /// 标题/网站名
-        #[arg(short = 't', long = "title")]
-        title: Option<String>,
-        /// 用户名
-        #[arg(short = 'u', long = "uname")]
-        username: Option<String>,
-        /// 密码
-        #[arg(short = 'p', long = "passwd")]
-        passwd: Option<String>,
-        /// 网址
-        #[arg(short = 'U', long = "url")]
-        url: Option<String>,
-        /// 备注
-        #[arg(short = 'n', long = "notes")]
-        notes: Option<String>,
+        #[arg(short = 't', long = "title")] title: Option<String>,
+        #[arg(short = 'u', long = "uname")] username: Option<String>,
+        #[arg(short = 'p', long = "passwd")] passwd: Option<String>,
+        #[arg(short = 'U', long = "url")] url: Option<String>,
+        #[arg(short = 'n', long = "notes")] notes: Option<String>,
     },
 
     /// 列出所有记录
     List,
 
     /// 查看单条记录详情
-    Get {
-        /// 记录 ID（前8位即可）
-        id_prefix: String,
-    },
+    Get { id_prefix: String },
 
     /// 删除记录
-    Delete {
-        /// 记录 ID（前8位即可）
-        id_prefix: String,
-    },
+    Delete { id_prefix: String },
 
     /// 编辑记录
     Edit {
-        /// 记录 ID（前8位即可）
         id_prefix: String,
-        #[arg(short = 't', long = "title")]
-        title: Option<String>,
-        #[arg(short = 'u', long = "uname")]
-        username: Option<String>,
-        #[arg(short = 'p', long = "passwd")]
-        passwd: Option<String>,
-        #[arg(short = 'U', long = "url")]
-        url: Option<String>,
-        #[arg(short = 'n', long = "notes")]
-        notes: Option<String>,
+        #[arg(short = 't', long = "title")] title: Option<String>,
+        #[arg(short = 'u', long = "uname")] username: Option<String>,
+        #[arg(short = 'p', long = "passwd")] passwd: Option<String>,
+        #[arg(short = 'U', long = "url")] url: Option<String>,
+        #[arg(short = 'n', long = "notes")] notes: Option<String>,
     },
+
+    /// 注册
+    Regist,
 
     /// 同步到服务器
     Upload,
@@ -80,35 +65,28 @@ enum Commands {
 }
 
 fn default_db_path() -> PathBuf {
-    dirs_first().unwrap_or_else(|| PathBuf::from(".")).join(".vlt").join("vault.db")
+    dirs_first().unwrap_or_else(|| PathBuf::from(".")).join(".vlt")
 }
 
 fn dirs_first() -> Option<PathBuf> {
-    std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
-        .ok()
-        .map(PathBuf::from)
+    std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok().map(PathBuf::from)
 }
 
 fn main() {
     let cli = Cli::parse();
-    let db_path = if cli.db.to_string_lossy() == "." { default_db_path() } else { cli.db.clone() };
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
+    // 服务器地址优先级：命令行 > 环境变量 > 默认
+    let server = if !cli.server.is_empty() { cli.server.clone() }
+    else { std::env::var("VLT_SERVER").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string()) };
+
+    let db_path = if cli.db.to_string_lossy() == "." { default_db_path().join("vault.db") } else { cli.db.clone() };
+    if let Some(parent) = db_path.parent() { std::fs::create_dir_all(parent).ok(); }
     let mut db = Database::open(&db_path).expect("无法打开数据库");
 
-    // 需要解密的命令：先验证主密码
     let needs_unlock = matches!(cli.command, Commands::Add { .. } | Commands::List | Commands::Get { .. } | Commands::Edit { .. } | Commands::Upload | Commands::Delete { .. } | Commands::Download);
     if needs_unlock {
-        if !db.is_initialized() {
-            eprintln!("未初始化，请先运行: vlt init");
-            return;
-        }
+        if !db.is_initialized() { eprintln!("未初始化，请先运行: vlt init"); return; }
         let pass = rpassword::prompt_password("主密码: ").unwrap_or_default();
-        if !crypto::verify_and_load(&mut db, &pass) {
-            eprintln!("主密码错误");
-            return;
-        }
+        if !crypto::verify_and_load(&mut db, &pass) { eprintln!("主密码错误"); return; }
     }
 
     match cli.command {
@@ -118,40 +96,32 @@ fn main() {
         Commands::Get { id_prefix } => cmd_get(&db, &id_prefix),
         Commands::Delete { id_prefix } => cmd_delete(&mut db, &id_prefix),
         Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&mut db, &id_prefix, title, username, passwd, url, notes),
-        Commands::Upload => cmd_upload(&db),
-        Commands::Download => cmd_download(&mut db),
+        Commands::Regist => cmd_regist(&db, &server),
+        Commands::Upload => cmd_upload(&db, &server),
+        Commands::Download => cmd_download(&mut db, &server),
     }
 }
 
 fn cmd_init(db: &mut Database) {
-    if db.is_initialized() {
-        println!("已初始化");
-        return;
-    }
+    if db.is_initialized() { println!("已初始化"); return; }
     let pw1 = rpassword::prompt_password("设置主密码: ").unwrap_or_default();
     let pw2 = rpassword::prompt_password("确认主密码: ").unwrap_or_default();
-    if pw1 != pw2 {
-        eprintln!("两次输入不一致");
-        return;
-    }
+    if pw1 != pw2 { eprintln!("两次输入不一致"); return; }
     let hint = dialoguer::Input::<String>::new().with_prompt("密码提示（可选）").interact_text().unwrap_or_default();
     crypto::initialize_vault(db, &pw1, &hint);
     println!("✅ 初始化完成");
 }
 
 fn cmd_add(db: &mut Database, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
-    if !db.is_initialized() {
-        eprintln!("未初始化，请先运行: vlt init");
-        return;
-    }
+    if !db.is_initialized() { eprintln!("未初始化"); return; }
     let prompt = |label: &str| dialoguer::Input::<String>::new().with_prompt(label).interact_text().unwrap_or_default();
     let title = title.unwrap_or_else(|| prompt("标题"));
     let username = username.unwrap_or_else(|| prompt("用户名"));
-    let passwd = passwd.unwrap_or_else(|| rpassword::prompt_password("密码: ").unwrap_or_default());
+    let pwd = passwd.unwrap_or_else(|| rpassword::prompt_password("密码: ").unwrap_or_default());
     let url = url.unwrap_or_else(|| prompt("网址"));
     let notes = notes.unwrap_or_else(|| prompt("备注"));
     let id = uuid::Uuid::new_v4().to_string();
-    let enc = crypto::encrypt_field(&passwd);
+    let enc = crypto::encrypt_field(&pwd);
     let enc_notes = if notes.is_empty() { None } else { Some(crypto::encrypt_field(&notes)) };
     db.insert(&id, &title, &username, &enc, &enc_notes, &url);
     println!("✅ 已添加: {} [{}]", title, &id[..8]);
@@ -160,9 +130,7 @@ fn cmd_add(db: &mut Database, title: Option<String>, username: Option<String>, p
 fn cmd_list(db: &Database) {
     let items = db.list_all();
     if items.is_empty() { println!("暂无记录"); return; }
-    for (id, title, username, _, _, _, _) in &items {
-        println!("{:8}  {:<20}  {}", &id[..8], title, username);
-    }
+    for (id, title, username, _, _, _, _) in &items { println!("{:<8}  {:<20}  {}", &id[..8], title, username); }
 }
 
 fn cmd_get(db: &Database, prefix: &str) {
@@ -194,10 +162,71 @@ fn cmd_edit(db: &mut Database, prefix: &str, title: Option<String>, username: Op
     println!("✅ 已更新");
 }
 
-fn cmd_upload(_db: &Database) {
-    println!("⚠️  上传功能需配置服务器地址（待实现）");
+fn cmd_regist(db: &Database, server: &str) {
+    let client = reqwest::blocking::Client::new();
+    let payload = serde_json::json!({
+        "device_id": "cli",
+        "device_name": "cli",
+        "public_key": "BEGIN",
+    });
+    match client.post(format!("{}/api/devices/register", server)).json(&serde_json::json!({"records": [payload]})).send() {
+        Ok(r) => { eprintln!("{:?}",r); }
+        Err(e) => { eprintln!("{:?}",e); }
+    }
 }
 
-fn cmd_download(_db: &mut Database) {
-    println!("⚠️  下载功能需配置服务器地址（待实现）");
+fn cmd_upload(db: &Database, server: &str) {
+    let items = db.list_all();
+    if items.is_empty() { println!("无记录可上传"); return; }
+    let client = reqwest::blocking::Client::new();
+    let mut uploaded = 0;
+    let mut failed = 0;
+    for (id, title, username, enc_pwd, enc_notes, url, _updated_at) in &items {
+        let payload = serde_json::json!({
+            "record_id": id,
+            "device_id": "cli",
+            "encrypted_blob": serde_json::json!({
+                "title": title, "username": username,
+                "encrypted_password": enc_pwd, "encrypted_notes": enc_notes, "url": url,
+            }).to_string(),
+            "sync_version": 1,
+            "client_updated_at": 0_i64,
+            "operation": "create",
+        });
+        match client.post(format!("{}/api/sync/push", server)).json(&serde_json::json!({"records": [payload]})).send() {
+            Ok(r) if r.status().is_success() => uploaded += 1,
+            Ok(r) => { eprintln!("上传 {} 失败: {}", title, r.status()); failed += 1; }
+            Err(e) => { eprintln!("上传 {} 失败: {}", title, e); failed += 1; }
+        }
+    }
+    println!("✅ 上传完成: {} 成功, {} 失败", uploaded, failed);
+}
+
+fn cmd_download(db: &mut Database, server: &str) {
+    let client = reqwest::blocking::Client::new();
+    match client.get(format!("{}/api/sync/pull/0", server)).send() {
+        Ok(resp) => {
+            let records: serde_json::Value = resp.json().unwrap_or_default();
+            let empty: Vec<serde_json::Value> = vec![];
+            let arr = records.as_array().unwrap_or(&empty);
+            let mut inserted = 0;
+            for rec in arr {
+                let blob_str = rec["encrypted_blob"].as_str().unwrap_or("{}");
+                let blob: serde_json::Value = serde_json::from_str(blob_str).unwrap_or_default();
+                let id = rec["record_id"].as_str().unwrap_or("");
+                if !id.is_empty() && db.find_by_prefix(&id[..8]).is_none() {
+                    db.insert(id,
+                        blob["title"].as_str().unwrap_or(""),
+                        blob["username"].as_str().unwrap_or(""),
+                        blob["encrypted_password"].as_str().unwrap_or(""),
+                        &blob["encrypted_notes"].as_str().map(|s| s.to_string()),
+                        blob["url"].as_str().unwrap_or("")
+                    );
+                    inserted += 1;
+                }
+            }
+            println!("✅ 下载完成: {} 条新记录", inserted);
+        }
+        Err(e) => eprintln!("下载失败: {}", e),
+    }
 }

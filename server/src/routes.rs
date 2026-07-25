@@ -25,6 +25,7 @@ async fn register_device(
     body: web::Json<RegisterDeviceRequest>,
 ) -> HttpResponse {
     let r = body.into_inner();
+    print!("Registering device: {:?}", r);
     let result = sqlx::query(
         "INSERT OR REPLACE INTO devices (device_id, device_name, public_key, encrypted_data_key) VALUES (?, ?, ?, ?)"
     ).bind(&r.device_id).bind(&r.device_name).bind(&r.public_key).bind(&r.encrypted_data_key)
