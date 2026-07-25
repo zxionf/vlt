@@ -1,0 +1,89 @@
+@startuml
+' 客户端数据库表
+package "客户端 (Android/Rust CLI)" {
+    class key_pair {
+        + id: INTEGER <<PK>>
+        + salt: TEXT
+        + magic_text_iv: TEXT
+        + magic_text_cipher: TEXT
+        + encrypted_private_key: TEXT
+        + private_key_iv: TEXT
+        + password_hint: TEXT
+    }
+
+    class devices {
+        + device_id: TEXT <<PK>>
+        + device_name: TEXT
+        + public_key: TEXT
+        + encrypted_data_key: TEXT
+        + is_current_device: INTEGER
+        + created_at: INTEGER
+    }
+
+    class passwords {
+        + id: TEXT <<PK>>
+        + title: TEXT
+        + username: TEXT
+        + encrypted_password: TEXT
+        + encrypted_notes: TEXT
+        + url: TEXT
+        + tags: TEXT
+        + created_device_id: TEXT
+        + last_modified_device_id: TEXT
+        + created_at: INTEGER
+        + updated_at: INTEGER
+        + sync_version: INTEGER
+        + is_deleted: INTEGER
+    }
+
+    class tags {
+        + id: INTEGER <<PK>>
+        + name: TEXT
+    }
+
+    class password_tag_join {
+        + password_id: TEXT <<PK, FK>>
+        + tag_id: INTEGER <<PK, FK>>
+    }
+}
+
+' 服务器端数据库表（同步服务）
+package "服务器端" {
+    class registered_devices {
+        + device_id: TEXT <<PK>>
+        + public_key: TEXT
+        + device_name: TEXT
+        + signature: TEXT
+        + registered_at: TIMESTAMP
+        + is_authed: BOOL
+    }
+
+    class encrypted_data_keys {
+        + device_id: TEXT <<PK, FK>>
+        + encrypted_data_key: TEXT
+        + created_at: TIMESTAMP
+        + updated_at: TIMESTAMP
+    }
+
+    class sync_records {
+        + record_id: TEXT <<PK>>
+        + device_id: TEXT
+        + encrypted_blob: TEXT
+        + sync_version: INTEGER
+        + operation: TEXT <<create/update/delete>>
+        + client_updated_at: TIMESTAMP
+        + server_updated_at: TIMESTAMP
+    }
+
+    registered_devices "1" -- "1" encrypted_data_keys
+    registered_devices "1" -- "*" sync_records
+}
+
+' 关系说明（可选）
+' 客户端表关系
+key_pair "1" -- "1" devices : 本机设备密钥对
+devices "1" -- "*" passwords : 设备创建的记录
+passwords "1" -- "*" password_tag_join : 关联
+tags "1" -- "*" password_tag_join : 关联
+
+@enduml

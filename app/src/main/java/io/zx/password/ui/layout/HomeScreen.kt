@@ -118,13 +118,13 @@ private fun HomeScaffold(
             TopAppBar(
                 title = { Text(text = "PWD", style = MaterialTheme.typography.headlineSmall) },
                 actions = {
-                    IconButton(onClick = { }) {
-                        Icon(
-                            imageVector = Icons.Default.DownloadForOffline,
-                            "update",
-                            modifier = Modifier.size(30.dp)
-                        )
-                    }
+//                    IconButton(onClick = { }) {
+//                        Icon(
+//                            imageVector = Icons.Default.DownloadForOffline,
+//                            "update",
+//                            modifier = Modifier.size(30.dp)
+//                        )
+//                    }
                     IconButton(onClick = onAddClick) {
                         Icon(
                             imageVector = Icons.Default.Add,

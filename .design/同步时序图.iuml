@@ -1,0 +1,20 @@
+@startuml
+actor 用户
+participant "设备A\n(本地数据库)" as A
+participant "服务器\n(加密副本)" as S
+participant "设备B\n(本地数据库)" as B
+
+== 添加/修改密码 ==
+用户 -> A: 添加/编辑密码
+A -> A: 本地保存明文 → Data Key 加密
+A -> S: POST /sync/push\n(record_id, encrypted_blob, sync_version)
+S -> S: 存储/更新副本
+note right: 若版本冲突则返回错误
+
+== 同步到其他设备 ==
+B -> S: GET /sync/pull?since=上次拉取时间
+S --> B: 返回加密记录列表
+B -> B: 用 Data Key 解密每条记录
+B -> B: 合并到本地数据库
+note right: 冲突时可用最后写入胜出或提示用户
+@enduml
