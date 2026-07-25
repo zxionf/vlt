@@ -32,9 +32,8 @@ class PwdItemCardTest {
                 item {
                     PwdItemCard(
                         title = "标题",
-                        onCopyClick = {},
-                        onEditClick = {},
-                        onInfoClick = {})
+                        subtitle = "sd",
+                        onClick = {})
                 }
             }
         }
