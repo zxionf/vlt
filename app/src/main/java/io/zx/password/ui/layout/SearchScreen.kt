@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.zx.password.PasswdEntity
+import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
 import io.zx.password.ui.component.PasswordDetailDialog
@@ -41,7 +41,7 @@ fun SearchScreen(
     viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
 ) {
     var searchText by remember { mutableStateOf("") }
-    var detailItem by remember { mutableStateOf<PasswdEntity?>(null) }
+    var detailItem by remember { mutableStateOf<PasswordEntry?>(null) }
     val items by viewModel.items.collectAsStateWithLifecycle()
     val tagMap by viewModel.tagMap.collectAsState()
 
@@ -53,7 +53,7 @@ fun SearchScreen(
             entity.title.contains(searchText, ignoreCase = true) ||
             entity.username.contains(searchText, ignoreCase = true) ||
             entity.url?.contains(searchText, ignoreCase = true) == true ||
-            entity.notes?.contains(searchText, ignoreCase = true) == true ||
+            entity.encryptedNotes?.contains(searchText, ignoreCase = true) == true ||
             matchesTags
         }
     }
@@ -128,7 +128,7 @@ fun SearchScreen(
 
 @Composable
 private fun SearchResultCard(
-    item: PasswdEntity,
+    item: PasswordEntry,
     onClick: () -> Unit
 ) {
     Card(

@@ -20,7 +20,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import io.zx.password.PasswdEntity
+import io.zx.password.PasswordEntry
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
@@ -38,7 +38,7 @@ fun MainScreen() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    var editingItem by remember { mutableStateOf<PasswdEntity?>(null) }
+    var editingItem by remember { mutableStateOf<PasswordEntry?>(null) }
 
     Scaffold(
         bottomBar = {
@@ -109,8 +109,8 @@ fun BottomNavigationBar(navController: NavController) {
 @Composable
 fun NavigationGraph(
     navController: NavHostController,
-    editingItem: PasswdEntity?,
-    setEditingItem: (PasswdEntity?) -> Unit
+    editingItem: PasswordEntry?,
+    setEditingItem: (PasswordEntry?) -> Unit
 ) {
     NavHost(
         navController = navController,

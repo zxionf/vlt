@@ -6,13 +6,11 @@ class PwdRepository(
     private val dao: PwdDao,
     private val tagDao: TagDao
 ) {
-    // Password CRUD
-    fun getAll(): Flow<List<PasswdEntity>> = dao.getAll()
-    suspend fun insert(item: PasswdEntity) = dao.insert(item)
-    suspend fun update(item: PasswdEntity) = dao.update(item)
-    suspend fun delete(item: PasswdEntity) = dao.delete(item)
+    fun getAll(): Flow<List<PasswordEntry>> = dao.getAll()
+    suspend fun insert(item: PasswordEntry) = dao.insert(item)
+    suspend fun update(item: PasswordEntry) = dao.update(item)
+    suspend fun delete(item: PasswordEntry) = dao.delete(item)
 
-    // Tag CRUD
     fun getAllTags(): Flow<List<Tag>> = tagDao.getAll()
     suspend fun insertTag(name: String): Tag {
         val trimmed = name.trim()
@@ -22,24 +20,21 @@ class PwdRepository(
         return Tag(id = id, name = trimmed)
     }
 
-    // Tag-Password association
-    fun getTagsForPassword(passwdId: Long): Flow<List<Tag>> = tagDao.getTagsForPassword(passwdId)
-    suspend fun addTagToPassword(passwdId: Long, tagId: Long) {
-        tagDao.insertJoin(PasswordTagJoin(passwdId = passwdId, tagId = tagId))
+    fun getTagsForPassword(passwordId: String): Flow<List<Tag>> = tagDao.getTagsForPassword(passwordId)
+    suspend fun addTagToPassword(passwordId: String, tagId: Long) {
+        tagDao.insertJoin(PasswordTagJoin(passwordId = passwordId, tagId = tagId))
     }
-    suspend fun removeTagFromPassword(passwdId: Long, tagId: Long) {
-        tagDao.deleteJoin(PasswordTagJoin(passwdId = passwdId, tagId = tagId))
+    suspend fun removeTagFromPassword(passwordId: String, tagId: Long) {
+        tagDao.deleteJoin(PasswordTagJoin(passwordId = passwordId, tagId = tagId))
     }
-    suspend fun setTagsForPassword(passwdId: Long, tagNames: List<String>) {
-        // Remove all existing joins
-        tagDao.deleteJoinsForPassword(passwdId)
-        // Add new joins
+    suspend fun setTagsForPassword(passwordId: String, tagNames: List<String>) {
+        tagDao.deleteJoinsForPassword(passwordId)
         tagNames.forEach { name ->
             val tag = insertTag(name)
-            addTagToPassword(passwdId, tag.id)
+            addTagToPassword(passwordId, tag.id)
         }
     }
-    suspend fun deleteJoinsForPassword(passwdId: Long) {
-        tagDao.deleteJoinsForPassword(passwdId)
+    suspend fun deleteJoinsForPassword(passwordId: String) {
+        tagDao.deleteJoinsForPassword(passwordId)
     }
 }

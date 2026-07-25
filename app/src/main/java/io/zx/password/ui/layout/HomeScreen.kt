@@ -50,7 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.zx.password.PasswdEntity
+import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
 import io.zx.password.ui.component.CommonDialog
@@ -63,7 +63,7 @@ import io.zx.password.ui.theme.PwdTheme
 @Composable
 fun HomeScreen(
     onAddClick: () -> Unit = {},
-    onEditItem: (PasswdEntity) -> Unit = {},
+    onEditItem: (PasswordEntry) -> Unit = {},
     viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
 ) {
 //    val factory = remember { PwdViewModelFactory(LocalContext.current) }
@@ -104,11 +104,11 @@ fun HomeScreen(
 @Composable
 private fun HomeScaffold(
     viewModel: PwdViewModel,
-    items: List<PasswdEntity>,
+    items: List<PasswordEntry>,
     onAddClick: () -> Unit,
-    onEditItem: (PasswdEntity) -> Unit
+    onEditItem: (PasswordEntry) -> Unit
 ) {
-    var detailItem by remember { mutableStateOf<PasswdEntity?>(null) }
+    var detailItem by remember { mutableStateOf<PasswordEntry?>(null) }
     var showHelp by remember { mutableStateOf<Boolean>(false) }
     Scaffold(
         modifier = Modifier.fillMaxSize(),

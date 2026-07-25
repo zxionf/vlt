@@ -97,6 +97,30 @@ object CryptoManager {
     fun bytesToBase64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
     fun base64ToBytes(s: String): ByteArray = Base64.decode(s, Base64.NO_WRAP)
 
+    // ─── RSA 加密/解密（用于 Data Key）───
+
+    fun rsaEncrypt(data: ByteArray, publicKey: PublicKey): EncryptResult {
+        val cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
+        cipher.init(Cipher.ENCRYPT_MODE, publicKey)
+        // RSA 不需要 IV，但为了统一接口，放空数组
+        return EncryptResult(iv = ByteArray(0), ciphertext = cipher.doFinal(data))
+    }
+
+    fun rsaDecrypt(iv: ByteArray, ciphertext: ByteArray, privateKey: PrivateKey): ByteArray {
+        val cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
+        cipher.init(Cipher.DECRYPT_MODE, privateKey)
+        return cipher.doFinal(ciphertext)
+    }
+
+    // ─── Data Key 生成 ───
+
+    fun generateDataKey(): SecretKey {
+        val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        return SecretKeySpec(bytes, "AES")
+    }
+
+    fun rawToAesKey(raw: ByteArray): SecretKey = SecretKeySpec(raw, "AES")
+
     // ─── Magic Text 验证 ───
 
     const val MAGIC_TEXT = "PWD_MASTER_VERIFY_OK"

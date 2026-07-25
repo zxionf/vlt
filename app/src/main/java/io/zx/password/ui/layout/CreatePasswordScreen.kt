@@ -16,18 +16,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.zx.password.PasswdEntity
+import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
-import io.zx.password.crypto.CryptoManager
-import io.zx.password.crypto.CryptoSession
+import io.zx.password.crypto.SessionManager
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatePasswordScreen(
     onBack: () -> Unit,
-    editItem: PasswdEntity? = null,
+    editItem: PasswordEntry? = null,
     viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
 ) {
     val isEdit = editItem != null
@@ -35,36 +35,35 @@ fun CreatePasswordScreen(
     var username by remember { mutableStateOf(editItem?.username ?: "") }
     var passwd by remember {
         mutableStateOf(
-            if (editItem != null) {
-                try { CryptoSession.decrypt(editItem.iv, editItem.encryptedPasswd) } catch (e: Exception) { "" }
-            } else ""
+            editItem?.let {
+                try { SessionManager.decrypt(it.encryptedPassword) } catch (e: Exception) { "" }
+            } ?: ""
         )
     }
     var url by remember { mutableStateOf(editItem?.url ?: "") }
     var notes by remember {
         mutableStateOf(
-            editItem?.notes?.let { enc ->
-                val parts = enc.split(":", limit = 2)
-                if (parts.size == 2) try { CryptoSession.decrypt(parts[0], parts[1]) } catch (e: Exception) { "" }
-                else enc
+            editItem?.encryptedNotes?.let {
+                try { SessionManager.decrypt(it) } catch (e: Exception) { "" }
             } ?: ""
         )
     }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val deviceId by remember {
+        mutableStateOf(
+            viewModel.items.value.firstOrNull()?.createdDeviceId ?: ""
+        )
+    }
 
-    // 标签
     var tagList by remember { mutableStateOf<List<String>>(emptyList()) }
     var tagInput by remember { mutableStateOf("") }
 
-    // 编辑模式加载已有标签
     LaunchedEffect(editItem) {
         if (editItem != null) {
             viewModel.tagMap.collect { map ->
                 val tags = map[editItem.id]
-                if (tags != null) {
-                    tagList = tags.map { it.name }
-                }
+                if (tags != null) tagList = tags.map { it.name }
                 return@collect
             }
         }
@@ -75,35 +74,33 @@ fun CreatePasswordScreen(
             scope.launch { snackbarHostState.showSnackbar("标题和密码不能为空") }
             return
         }
-        val encPasswd = CryptoSession.encrypt(passwd)
-        val encNotes = if (notes.isNotBlank()) CryptoSession.encrypt(notes) else null
-        val encryptedPasswdStr = "${CryptoManager.bytesToBase64(encPasswd.iv)}:${CryptoManager.bytesToBase64(encPasswd.ciphertext)}"
-        val encryptedNotesStr = encNotes?.let {
-            "${CryptoManager.bytesToBase64(it.iv)}:${CryptoManager.bytesToBase64(it.ciphertext)}"
-        }
+        val encryptedPassword = SessionManager.encrypt(passwd)
+        val encryptedNotes = if (notes.isNotBlank()) SessionManager.encrypt(notes) else null
 
         if (isEdit) {
             viewModel.updateItem(
                 editItem!!.copy(
                     title = title.trim(),
                     username = username.trim(),
-                    encryptedPasswd = encryptedPasswdStr,
-                    iv = CryptoManager.bytesToBase64(encPasswd.iv),
-                    notes = encryptedNotesStr,
+                    encryptedPassword = encryptedPassword,
+                    encryptedNotes = encryptedNotes,
                     url = url.trim().ifBlank { null },
-                    updatedAt = System.currentTimeMillis()
+                    updatedAt = System.currentTimeMillis(),
+                    lastModifiedDeviceId = deviceId
                 )
             )
             viewModel.setTagsForPassword(editItem.id, tagList)
         } else {
             viewModel.addItem(
-                PasswdEntity(
+                PasswordEntry(
+                    id = UUID.randomUUID().toString(),
                     title = title.trim(),
                     username = username.trim(),
-                    encryptedPasswd = encryptedPasswdStr,
-                    iv = CryptoManager.bytesToBase64(encPasswd.iv),
-                    notes = encryptedNotesStr,
-                    url = url.trim().ifBlank { null }
+                    encryptedPassword = encryptedPassword,
+                    encryptedNotes = encryptedNotes,
+                    url = url.trim().ifBlank { null },
+                    createdDeviceId = deviceId,
+                    lastModifiedDeviceId = deviceId
                 )
             )
         }
@@ -130,119 +127,39 @@ fun CreatePasswordScreen(
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题 *") }, placeholder = { Text("如：Google、GitHub") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("用户名 / 账号") }, placeholder = { Text("如：user@gmail.com") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = passwd, onValueChange = { passwd = it }, label = { Text("密码 *") }, placeholder = { Text("输入密码") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation())
+            OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("网址") }, placeholder = { Text("如：https://github.com") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注") }, placeholder = { Text("备注信息（可选）") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5)
 
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("标题 *") },
-                placeholder = { Text("如：Google、GitHub") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text("用户名 / 账号") },
-                placeholder = { Text("如：user@gmail.com") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = passwd,
-                onValueChange = { passwd = it },
-                label = { Text("密码 *") },
-                placeholder = { Text("输入密码") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation()
-            )
-
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text("网址") },
-                placeholder = { Text("如：https://github.com") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                label = { Text("备注") },
-                placeholder = { Text("备注信息（可选）") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-                maxLines = 5
-            )
-
-            // 标签
             Spacer(modifier = Modifier.height(4.dp))
             Text("标签", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (tagList.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     tagList.forEach { tag ->
-                        InputChip(
-                            selected = false,
-                            onClick = { },
-                            label = { Text(tag) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = { tagList = tagList.filter { it != tag } },
-                                    modifier = Modifier.size(16.dp)
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "删除标签", modifier = Modifier.size(12.dp))
-                                }
+                        InputChip(selected = false, onClick = { }, label = { Text(tag) }, trailingIcon = {
+                            IconButton(onClick = { tagList = tagList.filter { it != tag } }, modifier = Modifier.size(16.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "删除标签", modifier = Modifier.size(12.dp))
                             }
-                        )
+                        })
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = tagInput,
-                    onValueChange = { tagInput = it },
-                    placeholder = { Text("添加标签") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(value = tagInput, onValueChange = { tagInput = it }, placeholder = { Text("添加标签") }, modifier = Modifier.weight(1f), singleLine = true)
                 IconButton(onClick = {
-                    val trimmed = tagInput.trim()
-                    if (trimmed.isNotBlank() && trimmed !in tagList) {
-                        tagList = tagList + trimmed
-                        tagInput = ""
-                    }
-                }) {
-                    Icon(Icons.Default.Add, contentDescription = "添加标签")
-                }
+                    val t = tagInput.trim()
+                    if (t.isNotBlank() && t !in tagList) { tagList = tagList + t; tagInput = "" }
+                }) { Icon(Icons.Default.Add, contentDescription = "添加标签") }
             }
-
             Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = { save() },
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                Text("保存记录")
-            }
+            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) { Text("保存记录") }
         }
     }
 }
