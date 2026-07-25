@@ -127,11 +127,12 @@ class MainActivity : FragmentActivity() {
                 val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this),
                     object : BiometricPrompt.AuthenticationCallback() {
                         override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) {
-                            if (KeystoreHelper.hasBiometricKey(ctx) && SessionManager.unlockWithBiometric(ctx)) {
-                                viewModel.unlock()
-                            } else {
-                                viewModel.needsPasswordInput = true
-                            }
+                            val hasKey = KeystoreHelper.hasBiometricKey(ctx)
+                            android.util.Log.d("AUTH", "生物识别成功, hasCachedKmaster=$hasKey")
+                            val ok = if (hasKey) SessionManager.unlockWithBiometric(ctx) else false
+                            android.util.Log.d("AUTH", "unlockWithBiometric=$ok")
+                            if (ok) viewModel.unlock()
+                            else { android.util.Log.d("AUTH", "降级到主密码输入"); viewModel.needsPasswordInput = true }
                         }
                         override fun onAuthenticationFailed() {}
                         override fun onAuthenticationError(ec: Int, es: CharSequence) {

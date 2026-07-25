@@ -48,14 +48,18 @@ object KeystoreHelper {
 
     /** 用 Keystore 密钥加密 K_master 并存到 SharedPreferences */
     fun storeKmForBiometric(context: Context, kMaster: SecretKey) {
+        android.util.Log.d("KEYSTORE", "storeKmForBiometric 调用")
         try {
             val enc = encryptWithKeystore(kMaster.encoded)
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val ok = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_KM_IV, Base64.encodeToString(enc.iv, Base64.NO_WRAP))
                 .putString(KEY_KM_CT, Base64.encodeToString(enc.ciphertext, Base64.NO_WRAP))
-                .apply()
-        } catch (_: Exception) { /* 降级：不缓存 */ }
+                .commit() // 同步写入，避免 onComplete 后立即检查时还没写完
+            android.util.Log.d("KEYSTORE", "storeKmForBiometric 完成, commit=$ok")
+        } catch (e: Exception) {
+            android.util.Log.e("KEYSTORE", "storeKmForBiometric 失败", e)
+        }
     }
 
     /** 从 SharedPreferences + Keystore 解密恢复 K_master */
@@ -64,6 +68,7 @@ object KeystoreHelper {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val ivB64 = prefs.getString(KEY_KM_IV, null) ?: return null
             val ctB64 = prefs.getString(KEY_KM_CT, null) ?: return null
+            android.util.Log.d("KEYSTORE", "getKmFromBiometric 读取缓存")
             val iv = Base64.decode(ivB64, Base64.NO_WRAP)
             val ct = Base64.decode(ctB64, Base64.NO_WRAP)
             val raw = decryptWithKeystore(iv, ct)
