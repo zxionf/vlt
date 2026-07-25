@@ -9,7 +9,11 @@ import io.zx.password.PwdDB
 import io.zx.password.SyncManager
 import io.zx.password.ui.theme.ThemePreferences
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -104,7 +108,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
             val pushResult = SyncManager.pushRecords(entries)
 
-            val prefs = context.getSharedPreferences("sync_prefs", android.content.Context.MODE_PRIVATE)
+            val prefs =
+                context.getSharedPreferences("sync_prefs", android.content.Context.MODE_PRIVATE)
             val lastSync = prefs.getLong("last_sync", 0L)
             val pullResult = SyncManager.pullRecords(lastSync)
 

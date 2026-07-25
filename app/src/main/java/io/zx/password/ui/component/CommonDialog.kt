@@ -15,8 +15,8 @@ import androidx.compose.ui.window.DialogProperties
 
 @Composable
 fun CommonDialog(
-    title:String,
-    text:String,
+    title: String,
+    text: String,
     onDismiss: () -> Unit
 ) {
 

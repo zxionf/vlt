@@ -82,15 +82,17 @@ fun HomeScreen(
     )
 
     when (uiState) {
-        is PwdViewModel.UiState.Loading-> {
+        is PwdViewModel.UiState.Loading -> {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 CircularProgressIndicator()
             }
         }
+
         is PwdViewModel.UiState.Success -> {
             val items = (uiState as PwdViewModel.UiState.Success).items
             HomeScaffold(viewModel, items, onAddClick, onEditItem)
         }
+
         is PwdViewModel.UiState.Error -> {
             // 显示错误信息
             Text(text = (uiState as PwdViewModel.UiState.Error).message)
@@ -116,14 +118,23 @@ private fun HomeScaffold(
             TopAppBar(
                 title = { Text(text = "PWD", style = MaterialTheme.typography.headlineSmall) },
                 actions = {
-                    IconButton(onClick = {  }) {
-                        Icon( imageVector = Icons.Default.DownloadForOffline, "update", modifier = Modifier.size(30.dp))
+                    IconButton(onClick = { }) {
+                        Icon(
+                            imageVector = Icons.Default.DownloadForOffline,
+                            "update",
+                            modifier = Modifier.size(30.dp)
+                        )
                     }
                     IconButton(onClick = onAddClick) {
-                        Icon( imageVector = Icons.Default.Add, "add", modifier = Modifier.size(36.dp))
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            "add",
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
                 },
-                windowInsets = WindowInsets(0, 0, 0, 0))
+                windowInsets = WindowInsets(0, 0, 0, 0)
+            )
         }
     ) { innerPadding ->
         LazyColumn(
@@ -133,7 +144,7 @@ private fun HomeScaffold(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(16.dp)
         ) {
-            item{
+            item {
                 PwdItemIconCard(
                     title = "了解 PWD",
                     subtitle = "查看常见问题",
@@ -142,7 +153,7 @@ private fun HomeScaffold(
                     onClick = { showHelp = true }
                 )
             }
-            items(items, key={it.id}) {item ->
+            items(items, key = { it.id }) { item ->
                 PwdItemCard(
                     title = item.title,
                     subtitle = item.username,

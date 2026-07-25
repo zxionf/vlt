@@ -20,13 +20,17 @@ class PwdRepository(
         return Tag(id = id, name = trimmed)
     }
 
-    fun getTagsForPassword(passwordId: String): Flow<List<Tag>> = tagDao.getTagsForPassword(passwordId)
+    fun getTagsForPassword(passwordId: String): Flow<List<Tag>> =
+        tagDao.getTagsForPassword(passwordId)
+
     suspend fun addTagToPassword(passwordId: String, tagId: Long) {
         tagDao.insertJoin(PasswordTagJoin(passwordId = passwordId, tagId = tagId))
     }
+
     suspend fun removeTagFromPassword(passwordId: String, tagId: Long) {
         tagDao.deleteJoin(PasswordTagJoin(passwordId = passwordId, tagId = tagId))
     }
+
     suspend fun setTagsForPassword(passwordId: String, tagNames: List<String>) {
         tagDao.deleteJoinsForPassword(passwordId)
         tagNames.forEach { name ->
@@ -34,6 +38,7 @@ class PwdRepository(
             addTagToPassword(passwordId, tag.id)
         }
     }
+
     suspend fun deleteJoinsForPassword(passwordId: String) {
         tagDao.deleteJoinsForPassword(passwordId)
     }

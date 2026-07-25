@@ -19,8 +19,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,12 +49,17 @@ fun SearchScreen(
         null
     } else {
         items.filter { entity ->
-            val matchesTags = tagMap[entity.id]?.any { tag -> tag.name.contains(searchText, ignoreCase = true) } == true
+            val matchesTags = tagMap[entity.id]?.any { tag ->
+                tag.name.contains(
+                    searchText,
+                    ignoreCase = true
+                )
+            } == true
             entity.title.contains(searchText, ignoreCase = true) ||
-            entity.username.contains(searchText, ignoreCase = true) ||
-            entity.url?.contains(searchText, ignoreCase = true) == true ||
-            entity.encryptedNotes?.contains(searchText, ignoreCase = true) == true ||
-            matchesTags
+                    entity.username.contains(searchText, ignoreCase = true) ||
+                    entity.url?.contains(searchText, ignoreCase = true) == true ||
+                    entity.encryptedNotes?.contains(searchText, ignoreCase = true) == true ||
+                    matchesTags
         }
     }
 

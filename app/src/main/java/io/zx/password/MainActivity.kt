@@ -6,9 +6,26 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -21,13 +38,13 @@ import io.zx.password.crypto.KeystoreHelper
 import io.zx.password.crypto.SessionManager
 import io.zx.password.ui.layout.MainScreen
 import io.zx.password.ui.layout.SetMasterPasswordScreen
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import io.zx.password.ui.theme.LocalThemeState
 import io.zx.password.ui.theme.PasswordTheme
 import io.zx.password.ui.theme.ThemePreferences
 import io.zx.password.ui.theme.rememberThemeState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel : ViewModel() {
     var isUnlocked by mutableStateOf(false)
@@ -36,8 +53,13 @@ class MainViewModel : ViewModel() {
     var needsSetup by mutableStateOf(true)
     var needsPasswordInput by mutableStateOf(false)
 
-    fun unlock() { isUnlocked = true }
-    fun lock() { if (autoLockEnabled) isUnlocked = false }
+    fun unlock() {
+        isUnlocked = true
+    }
+
+    fun lock() {
+        if (autoLockEnabled) isUnlocked = false
+    }
 }
 
 class MainActivity : FragmentActivity() {
@@ -59,22 +81,32 @@ class MainActivity : FragmentActivity() {
             val themeState = rememberThemeState(themePreferences2)
             CompositionLocalProvider(LocalThemeState provides themeState) {
                 PasswordTheme {
-                    if (viewModel.needsSetup) SetMasterPasswordScreen { viewModel.needsSetup = false }
+                    if (viewModel.needsSetup) SetMasterPasswordScreen {
+                        viewModel.needsSetup = false
+                    }
                     else MainView()
                 }
             }
         }
     }
 
-    override fun onResume() { super.onResume(); if (!viewModel.needsSetup) viewModel.lock() }
-    override fun onPause() { super.onPause(); if (!viewModel.needsSetup) viewModel.lock() }
+    override fun onResume() {
+        super.onResume(); if (!viewModel.needsSetup) viewModel.lock()
+    }
+
+    override fun onPause() {
+        super.onPause(); if (!viewModel.needsSetup) viewModel.lock()
+    }
 
     @Composable
     fun MainView() {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             MainScreen()
             if (!viewModel.isUnlocked)
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
                     LockContent { authenticateWithBiometric() }
                 }
             if (viewModel.needsPasswordInput) {
@@ -112,7 +144,9 @@ class MainActivity : FragmentActivity() {
                         }) { Text("确认") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { viewModel.needsPasswordInput = false; viewModel.lock() }) { Text("取消") }
+                        TextButton(onClick = {
+                            viewModel.needsPasswordInput = false; viewModel.lock()
+                        }) { Text("取消") }
                     }
                 )
             }
@@ -124,7 +158,8 @@ class MainActivity : FragmentActivity() {
         val bm = BiometricManager.from(this)
         when (bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> {
-                val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this),
+                val prompt = BiometricPrompt(
+                    this, ContextCompat.getMainExecutor(this),
                     object : BiometricPrompt.AuthenticationCallback() {
                         override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) {
                             val hasKey = KeystoreHelper.hasBiometricKey(ctx)
@@ -132,20 +167,29 @@ class MainActivity : FragmentActivity() {
                             val ok = if (hasKey) SessionManager.unlockWithBiometric(ctx) else false
                             android.util.Log.d("AUTH", "unlockWithBiometric=$ok")
                             if (ok) viewModel.unlock()
-                            else { android.util.Log.d("AUTH", "降级到主密码输入"); viewModel.needsPasswordInput = true }
+                            else {
+                                android.util.Log.d(
+                                    "AUTH",
+                                    "降级到主密码输入"
+                                ); viewModel.needsPasswordInput = true
+                            }
                         }
+
                         override fun onAuthenticationFailed() {}
                         override fun onAuthenticationError(ec: Int, es: CharSequence) {
                             viewModel.needsPasswordInput = true
                         }
                     })
-                prompt.authenticate(BiometricPrompt.PromptInfo.Builder()
-                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-                    .setTitle("验证身份")
-                    .setSubtitle("请验证您的身份")
-                    .setDescription("使用指纹或人脸解锁")
-                    .build())
+                prompt.authenticate(
+                    BiometricPrompt.PromptInfo.Builder()
+                        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                        .setTitle("验证身份")
+                        .setSubtitle("请验证您的身份")
+                        .setDescription("使用指纹或人脸解锁")
+                        .build()
+                )
             }
+
             else -> viewModel.needsPasswordInput = true
         }
     }
@@ -153,7 +197,10 @@ class MainActivity : FragmentActivity() {
     @Composable
     fun LockContent(click: () -> Unit) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Text("应用已锁定", style = MaterialTheme.typography.headlineMedium)
                 Text("需要验证身份才能访问", style = MaterialTheme.typography.bodyLarge)
                 Button(onClick = click, modifier = Modifier.padding(top = 32.dp)) { Text("解锁") }

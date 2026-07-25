@@ -1,6 +1,16 @@
 package io.zx.password.ui.layout
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -8,8 +18,25 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -36,7 +63,11 @@ fun CreatePasswordScreen(
     var passwd by remember {
         mutableStateOf(
             editItem?.let {
-                try { SessionManager.decrypt(it.encryptedPassword) } catch (e: Exception) { "" }
+                try {
+                    SessionManager.decrypt(it.encryptedPassword)
+                } catch (e: Exception) {
+                    ""
+                }
             } ?: ""
         )
     }
@@ -44,7 +75,11 @@ fun CreatePasswordScreen(
     var notes by remember {
         mutableStateOf(
             editItem?.encryptedNotes?.let {
-                try { SessionManager.decrypt(it) } catch (e: Exception) { "" }
+                try {
+                    SessionManager.decrypt(it)
+                } catch (e: Exception) {
+                    ""
+                }
             } ?: ""
         )
     }
@@ -127,39 +162,113 @@ fun CreatePasswordScreen(
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题 *") }, placeholder = { Text("如：Google、GitHub") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("用户名 / 账号") }, placeholder = { Text("如：user@gmail.com") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = passwd, onValueChange = { passwd = it }, label = { Text("密码 *") }, placeholder = { Text("输入密码") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation())
-            OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("网址") }, placeholder = { Text("如：https://github.com") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注") }, placeholder = { Text("备注信息（可选）") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5)
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("标题 *") },
+                placeholder = { Text("如：Google、GitHub") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("用户名 / 账号") },
+                placeholder = { Text("如：user@gmail.com") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = passwd,
+                onValueChange = { passwd = it },
+                label = { Text("密码 *") },
+                placeholder = { Text("输入密码") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation()
+            )
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text("网址") },
+                placeholder = { Text("如：https://github.com") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                label = { Text("备注") },
+                placeholder = { Text("备注信息（可选）") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 5
+            )
 
             Spacer(modifier = Modifier.height(4.dp))
-            Text("标签", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "标签",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (tagList.isNotEmpty()) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     tagList.forEach { tag ->
-                        InputChip(selected = false, onClick = { }, label = { Text(tag) }, trailingIcon = {
-                            IconButton(onClick = { tagList = tagList.filter { it != tag } }, modifier = Modifier.size(16.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "删除标签", modifier = Modifier.size(12.dp))
-                            }
-                        })
+                        InputChip(
+                            selected = false,
+                            onClick = { },
+                            label = { Text(tag) },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { tagList = tagList.filter { it != tag } },
+                                    modifier = Modifier.size(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "删除标签",
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            })
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
             }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = tagInput, onValueChange = { tagInput = it }, placeholder = { Text("添加标签") }, modifier = Modifier.weight(1f), singleLine = true)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = tagInput,
+                    onValueChange = { tagInput = it },
+                    placeholder = { Text("添加标签") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
                 IconButton(onClick = {
                     val t = tagInput.trim()
-                    if (t.isNotBlank() && t !in tagList) { tagList = tagList + t; tagInput = "" }
+                    if (t.isNotBlank() && t !in tagList) {
+                        tagList = tagList + t; tagInput = ""
+                    }
                 }) { Icon(Icons.Default.Add, contentDescription = "添加标签") }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) { Text("保存记录") }
+            Button(
+                onClick = { save() },
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp)
+            ) { Text("保存记录") }
         }
     }
 }
