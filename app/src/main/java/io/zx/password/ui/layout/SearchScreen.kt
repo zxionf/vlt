@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,20 +31,31 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.zx.password.Pwd
+import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
+import io.zx.password.ui.component.PasswordDetailDialog
 
 @Composable
-fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))) {
+fun SearchScreen(
+    viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
+) {
     var searchText by remember { mutableStateOf("") }
+    var detailItem by remember { mutableStateOf<PasswordEntry?>(null) }
     val items by viewModel.items.collectAsStateWithLifecycle()
+    val tagMap by viewModel.tagMap.collectAsState()
 
-    // 基于 description 字段搜索
     val searchResults = if (searchText.isBlank()) {
-        null // null 表示未开始搜索
+        null
     } else {
-        items.filter { it.description.contains(searchText, ignoreCase = true) }
+        items.filter { entity ->
+            val matchesTags = tagMap[entity.id]?.any { tag -> tag.name.contains(searchText, ignoreCase = true) } == true
+            entity.title.contains(searchText, ignoreCase = true) ||
+            entity.username.contains(searchText, ignoreCase = true) ||
+            entity.url?.contains(searchText, ignoreCase = true) == true ||
+            entity.encryptedNotes?.contains(searchText, ignoreCase = true) == true ||
+            matchesTags
+        }
     }
 
     Column(
@@ -55,7 +67,7 @@ fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFacto
             value = searchText,
             onValueChange = { searchText = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("搜索账号或网站") },
+            placeholder = { Text("搜索标题、用户名、网址或备注") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
             singleLine = true,
             shape = MaterialTheme.shapes.medium
@@ -90,19 +102,40 @@ fun SearchScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFacto
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(searchResults, key = { it.id }) { item ->
-                    SearchResultCard(item)
+                    SearchResultCard(
+                        item = item,
+                        onClick = { detailItem = item }
+                    )
                 }
             }
         }
     }
+
+    // 详情弹窗
+    detailItem?.let { item ->
+        PasswordDetailDialog(
+            item = item,
+            onDismiss = { detailItem = null },
+            onEdit = { detailItem = null },
+            onDelete = {
+                viewModel.deleteItem(it)
+                detailItem = null
+            },
+            tags = tagMap[item.id]?.map { it.name } ?: emptyList()
+        )
+    }
 }
 
 @Composable
-private fun SearchResultCard(item: Pwd) {
+private fun SearchResultCard(
+    item: PasswordEntry,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = MaterialTheme.shapes.medium
+        shape = MaterialTheme.shapes.medium,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
@@ -114,12 +147,12 @@ private fun SearchResultCard(item: Pwd) {
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = item.description,
+                    text = item.title,
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = item.passwd,
+                    text = item.username,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1

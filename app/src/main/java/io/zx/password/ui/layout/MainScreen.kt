@@ -19,8 +19,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
+import io.zx.password.PasswordEntry
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
@@ -36,16 +36,23 @@ import androidx.navigation.compose.rememberNavController
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    var editingItem by remember { mutableStateOf<PasswordEntry?>(null) }
 
     Scaffold(
-        bottomBar = { BottomNavigationBar(navController) }
+        bottomBar = {
+            if (currentRoute in listOf("home", "search", "setting")) {
+                BottomNavigationBar(navController)
+            }
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            NavigationGraph(navController)
+            NavigationGraph(navController, editingItem) { editingItem = it }
         }
     }
 }
@@ -100,7 +107,11 @@ fun BottomNavigationBar(navController: NavController) {
 }
 
 @Composable
-fun NavigationGraph(navController: NavHostController) {
+fun NavigationGraph(
+    navController: NavHostController,
+    editingItem: PasswordEntry?,
+    setEditingItem: (PasswordEntry?) -> Unit
+) {
     NavHost(
         navController = navController,
         startDestination = BottomNavItem.Home.route,
@@ -110,7 +121,22 @@ fun NavigationGraph(navController: NavHostController) {
         popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 100)) },
     ) {
         composable(BottomNavItem.Home.route) {
-            HomeScreen()
+            HomeScreen(
+                onAddClick = { navController.navigate("create_password") },
+                onEditItem = { item ->
+                    setEditingItem(item)
+                    navController.navigate("create_password")
+                }
+            )
+        }
+        composable("create_password") {
+            CreatePasswordScreen(
+                editItem = editingItem,
+                onBack = {
+                    setEditingItem(null)
+                    navController.popBackStack()
+                }
+            )
         }
         composable(BottomNavItem.Search.route) {
             SearchScreen()

@@ -5,9 +5,12 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [Pwd::class], version = 1, exportSchema = false)
+@Database(entities = [PasswordEntry::class, Tag::class, PasswordTagJoin::class, DeviceEntity::class, KeyPairEntity::class], version = 4, exportSchema = false)
 abstract class PwdDB : RoomDatabase(){
-    abstract fun PwdDao() : PwdDao
+    abstract fun PwdDao(): PwdDao
+    abstract fun TagDao(): TagDao
+    abstract fun KeyPairDao(): KeyPairDao
+    abstract fun DeviceDao(): DeviceDao
 
     companion object {
         // 使用单例模式避免多次创建数据库实例，这是一种常见的优化做法

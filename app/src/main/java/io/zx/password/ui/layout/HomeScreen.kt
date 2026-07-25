@@ -20,10 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DownloadForOffline
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -46,28 +43,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.zx.password.Pwd
+import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
 import io.zx.password.ui.component.CommonDialog
-import io.zx.password.ui.component.EditPwdDialog
-import io.zx.password.ui.component.InfoDialog
+import io.zx.password.ui.component.PasswordDetailDialog
 import io.zx.password.ui.theme.PwdTheme
 
 @SuppressLint("ViewModelConstructorInComposable")
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview()
 @Composable
-fun HomeScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))) {
+fun HomeScreen(
+    onAddClick: () -> Unit = {},
+    onEditItem: (PasswordEntry) -> Unit = {},
+    viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
+) {
 //    val factory = remember { PwdViewModelFactory(LocalContext.current) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -91,7 +89,7 @@ fun HomeScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory
         }
         is PwdViewModel.UiState.Success -> {
             val items = (uiState as PwdViewModel.UiState.Success).items
-            HomeScaffold(viewModel,items)
+            HomeScaffold(viewModel, items, onAddClick, onEditItem)
         }
         is PwdViewModel.UiState.Error -> {
             // 显示错误信息
@@ -106,11 +104,11 @@ fun HomeScreen(viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory
 @Composable
 private fun HomeScaffold(
     viewModel: PwdViewModel,
-    items:List<Pwd>
-){
-    var slectedItem by remember { mutableStateOf<Pwd?>(null) }
-    val clipboard = LocalClipboardManager.current
-    var showinfo by remember { mutableStateOf<Boolean>(true) }
+    items: List<PasswordEntry>,
+    onAddClick: () -> Unit,
+    onEditItem: (PasswordEntry) -> Unit
+) {
+    var detailItem by remember { mutableStateOf<PasswordEntry?>(null) }
     var showHelp by remember { mutableStateOf<Boolean>(false) }
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -121,7 +119,7 @@ private fun HomeScaffold(
                     IconButton(onClick = {  }) {
                         Icon( imageVector = Icons.Default.DownloadForOffline, "update", modifier = Modifier.size(30.dp))
                     }
-                    IconButton(onClick = { viewModel.addItem(Pwd( description = "test", passwd = "dddddd")) }) {
+                    IconButton(onClick = onAddClick) {
                         Icon( imageVector = Icons.Default.Add, "add", modifier = Modifier.size(36.dp))
                     }
                 },
@@ -144,46 +142,29 @@ private fun HomeScaffold(
                     onClick = { showHelp = true }
                 )
             }
-//            items(20) {
-//                index -> Card(modifier = Modifier.fillMaxSize(), onClick = {}) {
-//                Text(text = "text" + index, modifier = Modifier.padding(16.dp))
-//                }
-//            }
             items(items, key={it.id}) {item ->
                 PwdItemCard(
-                    title = item.description,
-                    onInfoClick = { showinfo = true; slectedItem = item },
-                    onEditClick = { showinfo = false; slectedItem = item },
-                    onCopyClick = { clipboard.setText(AnnotatedString(item.passwd)) }
+                    title = item.title,
+                    subtitle = item.username,
+                    onClick = { detailItem = item }
                 )
-            }
-
-            item {
-                Card(modifier = Modifier.fillMaxSize(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                ){
-                    Text(text="dibu",modifier = Modifier.padding(16.dp))
-                }
             }
         }
 
-        when (showinfo){
-            true -> slectedItem?.let {
-                    item ->
-                InfoDialog(
-                    item = item,
-                    onDismiss = { slectedItem = null },
-                )
-            }
-            else -> slectedItem?.let {
-                    item ->
-                EditPwdDialog(
-                    item = item,
-                    onDismiss = { slectedItem = null },
-                    onConfirm = { updated -> viewModel.updateItem(updated) },
-                    onDelete = { delete -> viewModel.deleteItem(delete) }
-                )
-            }
+        val tagMap by viewModel.tagMap.collectAsState()
+        detailItem?.let { item ->
+            PasswordDetailDialog(
+                item = item,
+                onDismiss = { detailItem = null },
+                onEdit = { editItem ->
+                    detailItem = null
+                    onEditItem(editItem)
+                },
+                onDelete = { deleteItem ->
+                    viewModel.deleteItem(deleteItem)
+                },
+                tags = tagMap[item.id]?.map { it.name } ?: emptyList()
+            )
         }
 
         if (showHelp) CommonDialog("提示", "什么都没有", { showHelp = false })
@@ -260,61 +241,35 @@ private fun IconTextCard(
 @Composable
 fun PwdItemCard(
     title: String,
-    onInfoClick: () -> Unit,
-    onCopyClick: () -> Unit,
-    onEditClick: () -> Unit
-){
+    subtitle: String,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxSize(),
         colors = CardDefaults.cardColors(
             containerColor = PwdTheme.colors.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
-    ){
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ),
+        onClick = onClick
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-//            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = title, modifier = Modifier.weight(1f))
-            IconButton(onClick = onInfoClick) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(8.dp)
-                        .size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                    contentDescription = null,
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
                 )
-            }
-            IconButton(onClick = onEditClick) {
-                Icon(
-                    imageVector = Icons.Filled.Edit,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(8.dp)
-                        .size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                    contentDescription = null,
-                )
-            }
-//            Spacer(modifier = Modifier.width(16.dp))
-            IconButton(onClick = onCopyClick) {
-                Icon(
-                    imageVector = Icons.Filled.ContentCopy,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(8.dp)
-                        .size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                    contentDescription = null,
-                )
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
