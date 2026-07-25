@@ -1,7 +1,16 @@
 [package]
-name = "pwd-server"
+name = "vlt-server"
 version = "0.1.0"
 edition = "2021"
+default-run = "vltsd"
+
+[[bin]]
+name = "vltsd"
+path = "src/vltsd.rs"
+
+[[bin]]
+name = "vlts"
+path = "src/vlts.rs"
 
 [dependencies]
 actix-web = "4"
@@ -17,3 +26,4 @@ base64 = "0.22"
 sha2 = "0.10"
 log = "0.4"
 env_logger = "0.11"
+clap = { version = "4", features = ["derive"] }

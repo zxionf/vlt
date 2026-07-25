@@ -11,148 +11,90 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object SyncManager {
-    var baseUrl: String = "http://10.0.2.2:8080" // 模拟器默认宿主机地址
+    var baseUrl: String = "http://10.0.2.2:8080"
 
     // ─── 设备管理 ───
 
-    /** 注册当前设备到服务器 */
-    suspend fun registerDevice(
-        deviceId: String,
-        deviceName: String,
-        publicKey: String,
-        encryptedDataKey: String
-    ): Result<String> = apiPost("/api/devices/register", JSONObject().apply {
-        put("device_id", deviceId)
-        put("device_name", deviceName)
-        put("public_key", publicKey)
-        put("encrypted_data_key", encryptedDataKey)
-    })
-
-    /** 查询指定设备 */
-    suspend fun getDevice(deviceId: String): Result<JSONObject> =
-        apiGet("/api/devices/$deviceId")
-
-    /** 获取待授权设备列表 */
-    suspend fun getPendingDevices(): Result<JSONArray> {
-        val response = apiGet("/api/devices/pending")
-        return response.map { it.getJSONArray("devices") }
+    suspend fun registerDevice(deviceId: String, deviceName: String, publicKey: String, encryptedDataKey: String): String = withContext(Dispatchers.IO) {
+        val json = JSONObject().apply {
+            put("device_id", deviceId); put("device_name", deviceName); put("public_key", publicKey)
+            put("encrypted_data_key", encryptedDataKey); put("signature", "")
+        }
+        post("/api/register", json)
     }
 
-    /** 授权设备 */
-    suspend fun authorizeDevice(
-        fromDeviceId: String,
-        toDeviceId: String,
-        deviceName: String,
-        encryptedDataKey: String
-    ): Result<String> = apiPost("/api/devices/authorize", JSONObject().apply {
-        put("from_device_id", fromDeviceId)
-        put("to_device_id", toDeviceId)
-        put("device_name", deviceName)
-        put("encrypted_data_key", encryptedDataKey)
-    })
-
-    // ─── 密码同步 ───
-
-    /** 上传密码记录 */
-    suspend fun pushRecords(entries: List<PasswordEntry>): Result<String> {
-        val arr = JSONArray()
-        entries.forEach { arr.put(entryToJson(it)) }
-        return apiPost("/api/sync/push", JSONObject().apply {
-            put("records", arr)
+    suspend fun authorizeDevice(fromDeviceId: String, toDeviceId: String, encryptedDataKey: String): String = withContext(Dispatchers.IO) {
+        post("/api/authorize", JSONObject().apply {
+            put("from_device_id", fromDeviceId); put("to_device_id", toDeviceId)
+            put("encrypted_data_key", encryptedDataKey)
         })
     }
 
-    /** 下拉更新记录 */
-    suspend fun pullRecords(since: Long): Result<List<PullRecord>> {
-        val response = apiGet("/api/sync/pull/$since")
-        return response.map { json ->
-            val records = json.getJSONArray("records")
-            val list = mutableListOf<PullRecord>()
-            for (i in 0 until records.length()) {
-                list.add(pullRecordFromJson(records.getJSONObject(i)))
-            }
-            list
-        }
+    // ─── 同步 ───
+
+    suspend fun pushRecords(records: List<PushRecord>): String = withContext(Dispatchers.IO) {
+        val arr = JSONArray()
+        records.forEach { arr.put(JSONObject().apply {
+            put("record_id", it.id); put("encrypted_blob", it.encryptedBlob)
+            put("sync_version", it.syncVersion); put("device_id", it.deviceId)
+            put("client_updated_at", it.clientUpdatedAt)
+        })}
+        post("/api/sync/push", JSONObject().apply { put("records", arr) })
     }
 
-    /** 健康检查 */
-    suspend fun healthCheck(): Result<String> = apiGet("/api/health").map { it.getString("status") }
+    suspend fun pullRecords(since: Long): List<ServerRecord> = withContext(Dispatchers.IO) {
+        val body = get("/api/sync/pull/$since")
+        if (body.startsWith("{")) { // error response
+            return@withContext emptyList()
+        }
+        val arr = JSONArray(body)
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            ServerRecord(
+                recordId = obj.getString("record_id"),
+                encryptedBlob = obj.getString("encrypted_blob"),
+                syncVersion = obj.optInt("sync_version", 1),
+                deviceId = obj.getString("device_id"),
+                clientUpdatedAt = obj.optLong("client_updated_at", 0L),
+                serverUpdatedAt = obj.optLong("server_updated_at", 0L)
+            )
+        }
+    }
 
     // ─── 内部实现 ───
 
-    private suspend fun apiGet(path: String): Result<JSONObject> = withContext(Dispatchers.IO) {
-        runCatching {
-            val conn = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 5000
-                readTimeout = 5000
-            }
-            val body = BufferedReader(InputStreamReader(conn.inputStream)).readText()
-            conn.disconnect()
-            JSONObject(body)
+    private fun get(path: String): String {
+        val conn = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 5000; readTimeout = 5000
         }
+        return BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
     }
 
-    private suspend fun apiPost(path: String, json: JSONObject): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val conn = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = 5000
-                readTimeout = 5000
-                setRequestProperty("Content-Type", "application/json")
-            }
-            OutputStreamWriter(conn.outputStream).use { it.write(json.toString()); it.flush() }
-            val body = BufferedReader(InputStreamReader(conn.inputStream)).readText()
-            conn.disconnect()
-            JSONObject(body).optString("message", "ok")
+    private fun post(path: String, json: JSONObject): String {
+        val conn = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true; connectTimeout = 5000; readTimeout = 5000
+            setRequestProperty("Content-Type", "application/json")
         }
+        OutputStreamWriter(conn.outputStream).use { it.write(json.toString()) }
+        return BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
     }
 
-    // ─── 序列化 ───
+    // ─── 数据类 ───
 
-    data class PullRecord(
+    data class PushRecord(
         val id: String,
-        val deviceId: String,
-        val title: String,
-        val username: String,
-        val encryptedData: String,
-        val encryptedNotes: String?,
-        val url: String?,
-        val createdDeviceId: String,
-        val lastModifiedDeviceId: String,
-        val createdAt: Long,
-        val updatedAt: Long,
+        val encryptedBlob: String,
         val syncVersion: Int,
-        val isDeleted: Boolean
+        val deviceId: String,
+        val clientUpdatedAt: Long
     )
 
-    private fun entryToJson(e: PasswordEntry): JSONObject = JSONObject().apply {
-        put("id", e.id)
-        put("title", e.title)
-        put("username", e.username)
-        put("encrypted_data", e.encryptedPassword)
-        put("encrypted_notes", e.encryptedNotes ?: "")
-        put("url", e.url ?: "")
-        put("created_device_id", e.createdDeviceId)
-        put("last_modified_device_id", e.lastModifiedDeviceId)
-        put("sync_version", e.syncVersion)
-        put("is_deleted", e.isDeleted)
-    }
-
-    private fun pullRecordFromJson(j: JSONObject): PullRecord = PullRecord(
-        id = j.getString("id"),
-        deviceId = j.getString("device_id"),
-        title = j.getString("title"),
-        username = j.getString("username"),
-        encryptedData = j.getString("encrypted_data"),
-        encryptedNotes = j.getString("encrypted_notes").ifBlank { null },
-        url = j.getString("url").ifBlank { null },
-        createdDeviceId = j.getString("created_device_id"),
-        lastModifiedDeviceId = j.getString("last_modified_device_id"),
-        createdAt = j.optLong("created_at", System.currentTimeMillis()),
-        updatedAt = j.optLong("updated_at", System.currentTimeMillis()),
-        syncVersion = j.optInt("sync_version", 1),
-        isDeleted = j.optBoolean("is_deleted", false)
+    data class ServerRecord(
+        val recordId: String,
+        val encryptedBlob: String,
+        val syncVersion: Int,
+        val deviceId: String,
+        val clientUpdatedAt: Long,
+        val serverUpdatedAt: Long
     )
 }
