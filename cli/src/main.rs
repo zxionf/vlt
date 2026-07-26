@@ -1,8 +1,10 @@
 mod crypto;
+mod models;
 mod db;
+mod query;
 
+use sqlx::{sqlite::{SqlitePool, SqlitePoolOptions}};
 use clap::{Parser, Subcommand};
-use db::Database;
 use std::path::PathBuf;
 
 /// vlt — 跨平台密码管理器 CLI
@@ -75,7 +77,8 @@ fn dirs_first() -> Option<PathBuf> {
     std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok().map(PathBuf::from)
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
     // 服务器地址优先级：命令行 > 环境变量 > 默认
     let server = if !cli.server.is_empty() { cli.server.clone() }
@@ -83,51 +86,50 @@ fn main() {
 
     let db_path = if cli.db.to_string_lossy() == "." { default_db_path().join("vault.db") } else { cli.db.clone() };
     if let Some(parent) = db_path.parent() { std::fs::create_dir_all(parent).ok(); }
-    let mut db = Database::open(&db_path).expect("无法打开数据库");
+    let url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
+    let pool  = SqlitePoolOptions::new().max_connections(1).connect(&url).await
+        .expect("无法连接数据库");
+
+    db::migrate(&pool).await;
 
     let needs_unlock = matches!(cli.command, Commands::Add { .. } | Commands::List | Commands::Get { .. } | Commands::Edit { .. } | Commands::Upload | Commands::Delete { .. } | Commands::Download);
     if needs_unlock {
-        if !db.is_initialized() { eprintln!("未初始化，请先运行: vlt init"); return; }
+        if !query::is_initialized(&pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
         let pass = rpassword::prompt_password("主密码: ").unwrap_or_default();
-        // if !crypto::verify_and_load(&mut db, &pass) { eprintln!("主密码错误"); return; }
-        match crypto::verify_and_load(&mut db, &pass) {
-            Ok(b) => {},
-            Err(e) => {eprint!("主密码错误"); return;},
+        if !crypto::verify_and_load(&pool, &pass).await.ok().unwrap() {
+            eprintln!("主密码错误"); return;
         }
     }
 
     match cli.command {
-        Commands::Init => cmd_init(&mut db),
-        Commands::Add { title, username, passwd, url, notes } => cmd_add(&mut db, title, username, passwd, url, notes),
-        Commands::List => cmd_list(&db),
-        Commands::Get { id_prefix } => cmd_get(&db, &id_prefix),
-        Commands::Delete { id_prefix } => cmd_delete(&mut db, &id_prefix),
-        Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&mut db, &id_prefix, title, username, passwd, url, notes),
+        Commands::Init => cmd_init(&pool).await,
+        Commands::Add { title, username, passwd, url, notes } => cmd_add(&pool, title, username, passwd, url, notes).await,
+        Commands::List => cmd_list(&pool).await,
+        Commands::Get { id_prefix } => cmd_get(&pool, &id_prefix).await,
+        Commands::Delete { id_prefix } => cmd_delete(&pool, &id_prefix),
+        Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&pool, &id_prefix, title, username, passwd, url, notes),
         Commands::Test => cmd_test(&server),
-        Commands::Regist => cmd_regist(&db, &server),
-        Commands::Upload => cmd_upload(&db, &server),
-        Commands::Download => cmd_download(&mut db, &server),
+        Commands::Regist => cmd_regist(&pool, &server),
+        Commands::Upload => cmd_upload(&pool, &server),
+        Commands::Download => cmd_download(&pool, &server),
     }
 }
 
-fn cmd_init(db: &mut Database) {
-    if db.is_initialized() { println!("已初始化"); return; }
+async fn cmd_init(pool: &SqlitePool) {
+    if query::is_initialized(&pool).await { println!("已初始化"); return; }
     let pw1 = rpassword::prompt_password("设置主密码: ").unwrap_or_default();
     let pw2 = rpassword::prompt_password("确认主密码: ").unwrap_or_default();
     if pw1 != pw2 { eprintln!("两次输入不一致"); return; }
     let hint = dialoguer::Input::<String>::new().with_prompt("密码提示（可选）").allow_empty(true).interact_text().unwrap_or_default();
     println!("正在初始化...");
-    match crypto::initialize_vault(db, &pw1, &hint) {
+    match crypto::initialize_vault(&pool, &pw1, &hint).await {
         Ok(_) => println!("初始化完成"),
-        Err(e) => {
-            println!("初始化失败");
-            eprintln!("{}", e);
-        }
+        Err(e) => eprintln!("初始化失败: {}",e),
     };
 }
 
-fn cmd_add(db: &mut Database, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
-    if !db.is_initialized() { eprintln!("未初始化"); return; }
+async fn cmd_add(pool: &SqlitePool, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
+    if !query::is_initialized(&pool).await { eprintln!("未初始化"); return; }
     let prompt = |label: &str| dialoguer::Input::<String>::new().with_prompt(label).interact_text().unwrap_or_default();
     let title = title.unwrap_or_else(|| prompt("标题"));
     let username = username.unwrap_or_else(|| prompt("用户名"));
@@ -136,42 +138,43 @@ fn cmd_add(db: &mut Database, title: Option<String>, username: Option<String>, p
     let notes = notes.unwrap_or_else(|| prompt("备注"));
     let id = uuid::Uuid::new_v4().to_string();
     let enc = crypto::encrypt_field(&pwd);
-    let enc_notes = if notes.is_empty() { None } else { Some(crypto::encrypt_field(&notes)) };
+    let enc_notes = if notes.is_empty() { "".to_string() } else { crypto::encrypt_field(&notes).unwrap_or_default() };
     let created_at = chrono::Local::now().timestamp_millis();
-    let device_id = db.get_device_info().unwrap().device_id;
-    db.insert_passwd(&id, &title, &username, &enc.unwrap(), &enc_notes.unwrap().ok(), &url ,&device_id,&device_id,created_at,created_at);
+    let device_id = query::get_device(&pool).await.unwrap().device_id;
+    query::insert_passwd(&pool,&id, &title, &username, &enc.unwrap(), &enc_notes, &url ,&device_id,&device_id,created_at,created_at,0,false).await;
     println!("已添加: {} [{}]", title, &id[..8]);
 }
 
-fn cmd_list(db: &Database) {
-    let items = db.list_all();
+async fn cmd_list(pool: &SqlitePool) {
+    let items: Vec<models::Password> = query::get_all_passwords(pool).await;
     if items.is_empty() { println!("暂无记录"); return; }
-    for (id, title, username, _, _, _, _) in &items { println!("{:<8}  {:<20}  {}", &id[..8], title, username); }
+    for item in &items { println!("{:<8}  {:<20}  {}", &item.id[..8], item.title, item.username); }
 }
 
-fn cmd_get(db: &Database, prefix: &str) {
-    let Some(record) = db.find_by_prefix(prefix) else { eprintln!("未找到"); return; };
-    let passwd = crypto::decrypt_field(&record.encrypted_password);
-    // let notes = record.encrypted_notes.as_deref().map(|n| crypto::decrypt_field(n)).unwrap_or_default();
-    println!("ID:      {}", record.id);
-    println!("标题:    {}", record.title);
-    println!("用户名:  {}", record.username);
-    // println!("密码:    {}", passwd);
-    println!("网址:    {}", record.url.as_deref().unwrap_or("-"));
-    // println!("备注:    {}", notes);
-    println!("创建:    {}", record.created_at);
-    println!("更新:    {}", record.updated_at);
+async fn cmd_get(pool: &SqlitePool, prefix: &str) {
+    let vec = query::find_by_prefix(pool, prefix).await;
+    if vec.is_empty() { println!("暂无记录"); return; }
+    let passwd = crypto::decrypt_field(&vec[0].encrypted_password);
+    let notes = vec[0].encrypted_notes.as_deref().map(|n| crypto::decrypt_field(n));
+    println!("ID:      {}", &vec[0].id);
+    println!("标题:    {}", &vec[0].title);
+    println!("用户名:  {}", &vec[0].username);
+    println!("密码:    {}", passwd.ok().unwrap());
+    println!("网址:    {}", &vec[0].url.as_deref().unwrap_or("-"));
+    println!("备注:    {}", notes.unwrap().ok().unwrap_or_default());
+    println!("创建:    {}", &vec[0].created_at);
+    println!("更新:    {}", &vec[0].updated_at);
 }
 
-fn cmd_delete(db: &mut Database, prefix: &str) {
-    let Some(record) = db.find_by_prefix(prefix) else { eprintln!("未找到"); return; };
-    let confirm = dialoguer::Confirm::new().with_prompt(format!("删除 '{}'？", record.title)).interact().unwrap_or(false);
-    if confirm { db.delete(&record.id); println!("已删除"); }
+fn cmd_delete(pool: &SqlitePool, prefix: &str) {
+    // let Some(record) = db.find_by_prefix(prefix) else { eprintln!("未找到"); return; };
+    // let confirm = dialoguer::Confirm::new().with_prompt(format!("删除 '{}'？", record.title)).interact().unwrap_or(false);
+    // if confirm { db.delete(&record.id); println!("已删除"); }
 }
 
-fn cmd_edit(db: &mut Database, prefix: &str, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
-    let Some(record) = db.find_by_prefix(prefix) else { eprintln!("未找到"); return; };
-    let encrypt_if = |val: &Option<String>| val.as_ref().map(|v| crypto::encrypt_field(v));
+fn cmd_edit(pool: &SqlitePool, prefix: &str, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
+    // let Some(record) = db.find_by_prefix(prefix) else { eprintln!("未找到"); return; };
+    // let encrypt_if = |val: &Option<String>| val.as_ref().map(|v| crypto::encrypt_field(v));
     // let new_enc = encrypt_if(&passwd).unwrap_or(record.encrypted_password.clone());
     // let new_notes = if notes.is_some() { encrypt_if(&notes) } else { record.encrypted_notes.clone() };
     // db.update(&record.id, &title.unwrap_or(record.title), &username.unwrap_or(record.username), &new_enc, &new_notes, &url.unwrap_or(record.url.unwrap_or_default()));
@@ -191,7 +194,7 @@ fn cmd_test(server: &str) {
     }
 }
 
-fn cmd_regist(db: &Database, server: &str) {
+fn cmd_regist(pool: &SqlitePool, server: &str) {
     let client = reqwest::blocking::Client::new();
     let payload = serde_json::json!({
         "device_id": "cli",
@@ -208,34 +211,34 @@ fn cmd_regist(db: &Database, server: &str) {
     }
 }
 
-fn cmd_upload(db: &Database, server: &str) {
-    let items = db.list_all();
-    if items.is_empty() { println!("无记录可上传"); return; }
-    let client = reqwest::blocking::Client::new();
-    let mut uploaded = 0;
-    let mut failed = 0;
-    for (id, title, username, enc_pwd, enc_notes, url, _updated_at) in &items {
-        let payload = serde_json::json!({
-            "record_id": id,
-            "device_id": "cli",
-            "encrypted_blob": serde_json::json!({
-                "title": title, "username": username,
-                "encrypted_password": enc_pwd, "encrypted_notes": enc_notes, "url": url,
-            }).to_string(),
-            "sync_version": 1,
-            "client_updated_at": 0_i64,
-            "operation": "create",
-        });
-        match client.post(format!("{}/api/sync/push", server)).json(&serde_json::json!({"records": [payload]})).send() {
-            Ok(r) if r.status().is_success() => uploaded += 1,
-            Ok(r) => { eprintln!("上传 {} 失败: {}", title, r.status()); failed += 1; }
-            Err(e) => { eprintln!("上传 {} 失败: {}", title, e); failed += 1; }
-        }
-    }
-    println!("✅ 上传完成: {} 成功, {} 失败", uploaded, failed);
+fn cmd_upload(pool: &SqlitePool, server: &str) {
+    // let items = db.list_all();
+    // if items.is_empty() { println!("无记录可上传"); return; }
+    // let client = reqwest::blocking::Client::new();
+    // let mut uploaded = 0;
+    // let mut failed = 0;
+    // for (id, title, username, enc_pwd, enc_notes, url, _updated_at) in &items {
+    //     let payload = serde_json::json!({
+    //         "record_id": id,
+    //         "device_id": "cli",
+    //         "encrypted_blob": serde_json::json!({
+    //             "title": title, "username": username,
+    //             "encrypted_password": enc_pwd, "encrypted_notes": enc_notes, "url": url,
+    //         }).to_string(),
+    //         "sync_version": 1,
+    //         "client_updated_at": 0_i64,
+    //         "operation": "create",
+    //     });
+    //     match client.post(format!("{}/api/sync/push", server)).json(&serde_json::json!({"records": [payload]})).send() {
+    //         Ok(r) if r.status().is_success() => uploaded += 1,
+    //         Ok(r) => { eprintln!("上传 {} 失败: {}", title, r.status()); failed += 1; }
+    //         Err(e) => { eprintln!("上传 {} 失败: {}", title, e); failed += 1; }
+    //     }
+    // }
+    // println!("✅ 上传完成: {} 成功, {} 失败", uploaded, failed);
 }
 
-fn cmd_download(db: &mut Database, server: &str) {
+fn cmd_download(pool: &SqlitePool, server: &str) {
     // let client = reqwest::blocking::Client::new();
     // match client.get(format!("{}/api/sync/pull/0", server)).send() {
     //     Ok(resp) => {
@@ -262,4 +265,11 @@ fn cmd_download(db: &mut Database, server: &str) {
     //     }
     //     Err(e) => eprintln!("下载失败: {}", e),
     // }
+}
+
+pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
+    SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(database_url)
+        .await
 }

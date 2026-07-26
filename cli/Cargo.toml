@@ -9,7 +9,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-rusqlite = { version = "0.31", features = ["bundled"] }
 ring = "0.17"
 aes-gcm = { version = "0.10", features = ["std"] }
 rand = "0.8"
@@ -28,3 +27,5 @@ dialoguer = "0.11"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 thiserror = "2.0.19"
 hostname = "0.4.2"
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
+tokio = { version = "1", features = ["full"] }

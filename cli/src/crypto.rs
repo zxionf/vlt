@@ -5,10 +5,12 @@ use rsa::{Oaep, pkcs1::EncodeRsaPublicKey, pkcs8::EncodePrivateKey};
 use sha2::Sha512;
 use hmac::Hmac;
 use pbkdf2::pbkdf2;
-use crate::db::Database;
+use sqlx::SqlitePool;
 use thiserror::Error;
 use std::sync::{Mutex, OnceLock};
 use rsa::{RsaPrivateKey, RsaPublicKey};
+
+use crate::query;
 
 const MAGIC_TEXT: &str = "PWD_MASTER_VERIFY_OK";
 const SALT_LEN: usize = 32;
@@ -37,6 +39,10 @@ pub enum CryptoError {
     Pkcs8(#[from] rsa::pkcs8::Error),
     #[error("PKCS1 错误: {0}")]
     Pkcs1(#[from] rsa::pkcs1::Error),
+    #[error("数据库未初始化，请先运行 init")]
+    NotInitialized,
+    #[error("数据库错误: {0}")]
+    Database(#[from] sqlx::Error),
 }
 
 fn set_key(key: [u8; 32]) {
@@ -81,8 +87,8 @@ pub fn decrypt_field(encoded: &str) -> Result<String, CryptoError> {
     Ok(String::from_utf8(plain)?)
 }
 
-pub fn verify_and_load(db: &mut Database, password: &str) -> Result<bool, CryptoError> {
-    let info = db.get_key_info().ok_or_else(|| CryptoError::KeyNotLoaded)?;
+pub async fn verify_and_load(pool: &SqlitePool, password: &str) -> Result<bool, CryptoError> {
+    let info = query::get_key_pair(pool).await.ok_or_else(|| CryptoError::NotInitialized)?;
     let salt = B64.decode(&info.salt)?;
     let mut key = [0u8; 32];
     pbkdf2::<Hmac<Sha512>>(password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut key)
@@ -100,8 +106,8 @@ pub fn verify_and_load(db: &mut Database, password: &str) -> Result<bool, Crypto
     }
 }
 
-pub fn initialize_vault(
-    db: &mut Database,
+pub async fn initialize_vault(
+    pool: &SqlitePool,
     password: &str,
     hint: &str,
 ) -> Result<(), CryptoError> {
@@ -141,26 +147,26 @@ pub fn initialize_vault(
     // 生成设备 ID
     let device_id = uuid::Uuid::new_v4().to_string();
 
-    db.save_key_info(
+    query::save_key_pair(
+        &pool,
         &B64.encode(salt),
         &B64.encode(nonce),
         &B64.encode(ct),
         hint,
         &B64.encode(encrypted_priv_key)
-    );
+    ).await?;
     let devname = hostname::get()
         .map(|h| h.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "Unknown Device".to_string());
-    db.save_device_info(
+    query::save_device(
+        &pool,
         &device_id,
         &devname,   // 可让用户输入设备名
         &pub_key_b64,
         &B64.encode(encrypted_data_key),
         true,                   // is_current_device
         chrono::Utc::now().timestamp_millis() as i64,
-    );
-    // 将派生密钥加载到内存
-    set_key(data_key);
+    ).await?;
     Ok(())
 }
 
