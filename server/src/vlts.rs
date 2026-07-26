@@ -67,7 +67,7 @@ async fn cmd_list_devices(pool: &SqlitePool) {
 }
 
 async fn cmd_list_pending(pool: &SqlitePool) {
-    let rows = sqlx::query("SELECT from_device_id, from_device_name, status FROM pending_authorizations WHERE status = 'pending'")
+    let rows = sqlx::query("SELECT device_id, device_name FROM devices WHERE status = 'pending'")
         .fetch_all(pool).await.unwrap();
     if rows.is_empty() { println!("无待授权设备"); return; }
     for r in &rows {

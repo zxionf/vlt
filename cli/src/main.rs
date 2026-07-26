@@ -54,6 +54,9 @@ enum Commands {
         #[arg(short = 'n', long = "notes")] notes: Option<String>,
     },
 
+    /// test
+    Test,
+
     /// 注册
     Regist,
 
@@ -96,6 +99,7 @@ fn main() {
         Commands::Get { id_prefix } => cmd_get(&db, &id_prefix),
         Commands::Delete { id_prefix } => cmd_delete(&mut db, &id_prefix),
         Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&mut db, &id_prefix, title, username, passwd, url, notes),
+        Commands::Test => cmd_test(&server),
         Commands::Regist => cmd_regist(&db, &server),
         Commands::Upload => cmd_upload(&db, &server),
         Commands::Download => cmd_download(&mut db, &server),
@@ -162,15 +166,32 @@ fn cmd_edit(db: &mut Database, prefix: &str, title: Option<String>, username: Op
     println!("✅ 已更新");
 }
 
+fn cmd_test(server: &str) {
+    let client = reqwest::blocking::Client::new();
+    match client.get(format!("{}/api/health", server)).send() {
+        Ok(r) => { 
+            match r.text() {
+                Ok(body) => eprint!("{}",body),
+                Err(e) => { eprintln!("{:#?}",e); }
+            }
+         }
+        Err(e) => { eprintln!("{:#?}",e); }
+    }
+}
+
 fn cmd_regist(db: &Database, server: &str) {
     let client = reqwest::blocking::Client::new();
     let payload = serde_json::json!({
         "device_id": "cli",
         "device_name": "cli",
         "public_key": "BEGIN",
+        "signature": "abc",
     });
-    match client.post(format!("{}/api/devices/register", server)).json(&serde_json::json!({"records": [payload]})).send() {
-        Ok(r) => { eprintln!("{:?}",r); }
+    match client.post(format!("{}/api/register", server)).json(&payload).send() {
+        Ok(r) => {
+            eprint!("{:#?}\n",r);
+            eprint!("{}",r.text().unwrap())
+        }
         Err(e) => { eprintln!("{:?}",e); }
     }
 }

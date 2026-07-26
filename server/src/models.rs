@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterDeviceRequest {
-    pub device_id: String,
-    pub device_name: String,
-    pub public_key: String,
-    pub encrypted_data_key: String,
+    pub device_id: String,      // uuid
+    pub device_name: String,    
+    pub public_key: String,     // base64 RSA 公钥
+    pub signature: String,      // 设备签名
 }
 
 #[derive(Debug, Deserialize)]

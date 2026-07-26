@@ -7,16 +7,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api")
             .route("/health", web::get().to(health))
-            .route("/devices/register", web::post().to(register_device))
-            .route("/devices/{id}", web::get().to(get_device))
-            .route("/devices/pending", web::get().to(list_pending_authorizations))
-            .route("/devices/authorize", web::post().to(authorize_device))
+            .route("/register", web::post().to(register_device))
+            // 设备相关
+            .route("/devices/{id}", web::get().to(get_device))               // 查看设备信息（已授权设备可用）
+            .route("/devices/pending", web::get().to(list_pending_authorizations)) // 待授权设备列表
+            .route("/data-key/{device_id}", web::get().to(get_encrypted_data_key)) // 获取本机加密DataKey
+            .route("/authorize", web::post().to(authorize_device))           // 授权设备（上传加密DataKey）
+            // 同步相关
             .route("/sync/push", web::post().to(sync_push))
-            .route("/sync/pull/{since}", web::get().to(sync_pull))
+            .route("/sync/pull/{device_id}/{since}", web::get().to(sync_pull)) // 增量拉取，排除自身
     );
 }
 
 async fn health() -> HttpResponse {
+    log::info!("Health check");
     HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
 }
 
@@ -24,16 +28,38 @@ async fn register_device(
     state: web::Data<AppState>,
     body: web::Json<RegisterDeviceRequest>,
 ) -> HttpResponse {
+    log::info!("Registering device: {:#?}", body);
     let r = body.into_inner();
-    print!("Registering device: {:?}", r);
-    let result = sqlx::query(
-        "INSERT OR REPLACE INTO devices (device_id, device_name, public_key, encrypted_data_key) VALUES (?, ?, ?, ?)"
-    ).bind(&r.device_id).bind(&r.device_name).bind(&r.public_key).bind(&r.encrypted_data_key)
-    .execute(&state.db).await;
+    
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM registered_devices")
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+    if count == 0 {
+        // 第一个设备，直接注册并授权
+        let result = sqlx::query(
+            "INSERT INTO registered_devices (device_id, device_name, public_key, signature) VALUES (?, ?, ?, ?)"
+        ).bind(&r.device_id).bind(&r.device_name).bind(&r.public_key).bind(&r.signature)
+        .execute(&state.db)
+        .await;
 
-    match result {
-        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"ok": true})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        match result {
+            Ok(_) => {
+                log::info!("First device registered and authorized: {}", r.device_id);
+                HttpResponse::Ok().json(serde_json::json!({"status": "authorized"}))
+            }
+            Err(e) => {
+                log::error!("Failed to register first device: {}", e);
+                HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+            }
+        }
+    } else {
+        // 后续设备，加入待授权队列
+        let mut map = state.pending_devices.lock().unwrap(); // 注意 await
+        // 如果队列中已有该 device_id，可以覆盖或忽略，这里覆盖
+        map.insert(r.device_id.clone(), r);
+        log::info!("Device added to pending queue");
+        HttpResponse::Ok().json(serde_json::json!({"status": "pending"}))
     }
 }
 
@@ -58,6 +84,10 @@ async fn get_device(
         Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "not found"})),
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
     }
+}
+
+async fn get_encrypted_data_key() -> HttpResponse {
+    HttpResponse::InternalServerError().json(serde_json::json!({"error": "e"}))
 }
 
 async fn list_pending_authorizations(

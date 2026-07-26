@@ -1,39 +1,39 @@
 use sqlx::SqlitePool;
 
 pub async fn migrate(pool: &SqlitePool) {
+    sqlx::query("PRAGMA foreign_keys = ON;").execute(pool).await.ok();
+
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS devices (
+        "CREATE TABLE IF NOT EXISTS registered_devices (
             device_id TEXT PRIMARY KEY,
+            public_key TEXT NOT NULL,
             device_name TEXT NOT NULL,
-            public_key TEXT NOT NULL,
+            signature TEXT,
+            registered_at TEXT DEFAULT (datetime('now')),
+            is_authed INTEGER NOT NULL DEFAULT 0
+        )"
+    ).execute(pool).await.ok();
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS encrypted_data_keys (
+            device_id TEXT PRIMARY KEY,
             encrypted_data_key TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (device_id) REFERENCES registered_devices(device_id)
         )"
     ).execute(pool).await.ok();
 
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS pending_authorizations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_device_id TEXT NOT NULL,
-            to_device_id TEXT NOT NULL,
-            public_key TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )"
-    ).execute(pool).await.ok();
-
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS password_records (
-            id TEXT PRIMARY KEY,
-            encrypted_password TEXT NOT NULL,
-            encrypted_notes TEXT,
-            url TEXT,
-            created_device_id TEXT NOT NULL,
-            last_modified_device_id TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            sync_version INTEGER DEFAULT 1,
-            is_deleted INTEGER DEFAULT 0
+        "CREATE TABLE IF NOT EXISTS sync_records (
+            record_id TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL,
+            encrypted_blob TEXT NOT NULL,
+            sync_version INTEGER NOT NULL DEFAULT 1,
+            operation TEXT NOT NULL CHECK(operation IN ('create','update','delete')),
+            client_updated_at INTEGER NOT NULL,
+            server_updated_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (device_id) REFERENCES registered_devices(device_id)
         )"
     ).execute(pool).await.ok();
 
