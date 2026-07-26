@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Add
@@ -30,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -53,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
+import io.zx.password.Tag
 import io.zx.password.ui.component.CommonDialog
 import io.zx.password.ui.component.PasswordDetailDialog
 import io.zx.password.ui.theme.PwdTheme
@@ -157,6 +161,7 @@ private fun HomeScaffold(
                 PwdItemCard(
                     title = item.title,
                     subtitle = item.username,
+                    tags = listOf(),
                     onClick = { detailItem = item }
                 )
             }
@@ -184,7 +189,7 @@ private fun HomeScaffold(
 }
 
 @Composable
-private fun PwdItemIconCard(
+fun PwdItemIconCard(
     imageVector: ImageVector,
     title: String,
     subtitle: String,
@@ -253,6 +258,7 @@ private fun IconTextCard(
 fun PwdItemCard(
     title: String,
     subtitle: String,
+    tags: List<String>,
     onClick: () -> Unit
 ) {
     Card(
@@ -270,10 +276,19 @@ fun PwdItemCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    if (tags.isNotEmpty()){
+                        tags.forEach { tag -> TagChip(text = tag) }
+                    }
+                }
+
                 if (subtitle.isNotBlank()) {
                     Text(
                         text = subtitle,
@@ -283,5 +298,20 @@ fun PwdItemCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun TagChip(text: String) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall
+        )
     }
 }

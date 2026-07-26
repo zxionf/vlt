@@ -162,7 +162,7 @@ fun SetMasterPasswordScreen(onComplete: () -> Unit) {
                                                 encPriv.ciphertext
                                             )
                                         }",
-                                        privateKeyIv = CryptoManager.bytesToBase64(encPriv.iv),
+//                                        privateKeyIv = CryptoManager.bytesToBase64(encPriv.iv),
                                         passwordHint = hint
                                     )
                                 )

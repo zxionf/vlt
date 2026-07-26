@@ -88,10 +88,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 publicKey = device.publicKey,
                 encryptedDataKey = device.encryptedDataKey ?: ""
             )
-            _syncStatus.value = result.fold(
-                onSuccess = { "注册成功: $it" },
-                onFailure = { "注册失败: ${it.message}" }
-            )
+//            _syncStatus.value = result.fold(
+//                onSuccess = { value -> "注册成功: $value" },
+//                onFailure = { error -> "注册失败: ${error.message}" }
+//            )
             _syncLoading.value = false
         }
     }
@@ -106,28 +106,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 db.PwdDao().getAll().collect { list = it; return@collect }
                 list
             }
-            val pushResult = SyncManager.pushRecords(entries)
+//            val pushResult = SyncManager.pushRecords(entries)
 
             val prefs =
                 context.getSharedPreferences("sync_prefs", android.content.Context.MODE_PRIVATE)
             val lastSync = prefs.getLong("last_sync", 0L)
             val pullResult = SyncManager.pullRecords(lastSync)
 
-            _syncStatus.value = buildString {
-                pushResult.fold(
-                    onSuccess = { append("上传成功; ") },
-                    onFailure = { append("上传失败: ${it.message}; ") }
-                )
-                pullResult.fold(
-                    onSuccess = { records ->
-                        append("下载 ${records.size} 条")
-                        if (records.isNotEmpty()) {
-                            prefs.edit { putLong("last_sync", System.currentTimeMillis()) }
-                        }
-                    },
-                    onFailure = { append("下载失败: ${it.message}") }
-                )
-            }
+//            _syncStatus.value = buildString {
+//                pushResult.fold(
+//                    onSuccess = { append("上传成功; ") },
+//                    onFailure = { append("上传失败: ${it.message}; ") }
+//                )
+//                pullResult.fold(
+//                    onSuccess = { records ->
+//                        append("下载 ${records.size} 条")
+//                        if (records.isNotEmpty()) {
+//                            prefs.edit { putLong("last_sync", System.currentTimeMillis()) }
+//                        }
+//                    },
+//                    onFailure = { append("下载失败: ${it.message}") }
+//                )
+//            }
             _syncLoading.value = false
         }
     }
