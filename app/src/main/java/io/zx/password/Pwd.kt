@@ -73,6 +73,5 @@ data class KeyPairEntity(
     val magicTextIv: String,
     val magicTextCipher: String,        // "PWD_MASTER_VERIFY_OK" 密文
     val encryptedPrivateKey: String,    // K_master 加密的设备私钥 (base64(iv):base64(ct))
-    val privateKeyIv: String,           // 私钥加密的 IV
     val passwordHint: String            // 密码提示
 )

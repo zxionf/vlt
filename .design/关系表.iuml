@@ -7,7 +7,6 @@ package "客户端 (Android/Rust CLI)" {
         + magic_text_iv: TEXT
         + magic_text_cipher: TEXT
         + encrypted_private_key: TEXT
-        + private_key_iv: TEXT
         + password_hint: TEXT
     }
 
@@ -16,7 +15,7 @@ package "客户端 (Android/Rust CLI)" {
         + device_name: TEXT
         + public_key: TEXT
         + encrypted_data_key: TEXT
-        + is_current_device: INTEGER
+        + is_current_device: BOOL
         + created_at: INTEGER
     }
 
@@ -27,13 +26,12 @@ package "客户端 (Android/Rust CLI)" {
         + encrypted_password: TEXT
         + encrypted_notes: TEXT
         + url: TEXT
-        + tags: TEXT
         + created_device_id: TEXT
         + last_modified_device_id: TEXT
         + created_at: INTEGER
         + updated_at: INTEGER
         + sync_version: INTEGER
-        + is_deleted: INTEGER
+        + is_deleted: BOOL
     }
 
     class tags {
@@ -45,6 +43,11 @@ package "客户端 (Android/Rust CLI)" {
         + password_id: TEXT <<PK, FK>>
         + tag_id: INTEGER <<PK, FK>>
     }
+    ' 客户端表关系
+    key_pair "1" -- "1" devices : 本机设备密钥对
+    devices "1" -- "*" passwords : 设备创建的记录
+    passwords "1" -- "*" password_tag_join : 关联
+    tags "1" -- "*" password_tag_join : 关联
 }
 
 ' 服务器端数据库表（同步服务）
@@ -78,12 +81,5 @@ package "服务器端" {
     registered_devices "1" -- "1" encrypted_data_keys
     registered_devices "1" -- "*" sync_records
 }
-
-' 关系说明（可选）
-' 客户端表关系
-key_pair "1" -- "1" devices : 本机设备密钥对
-devices "1" -- "*" passwords : 设备创建的记录
-passwords "1" -- "*" password_tag_join : 关联
-tags "1" -- "*" password_tag_join : 关联
 
 @enduml

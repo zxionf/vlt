@@ -1,0 +1,41 @@
+@startuml
+title CLI 初始化流程
+
+start
+:启动 CLI;
+
+if (本地数据库已存在且已初始化?) then (是)
+    :提示“数据库已初始化”;
+    stop
+else (否)
+    :提示用户设置主密码;
+    :输入主密码并确认;
+    
+    :生成随机盐 (32 bytes);
+    :PBKDF2-SHA512 迭代 600,000 次 派生 K_master;
+    
+    :加密 Magic Text ("PWD_MASTER_VERIFY_OK")，\n存入 key_pair 表;
+    :生成 RSA-3072 设备密钥对;
+    :用 K_master 加密私钥，\n存入 key_pair 表;
+    :生成随机 Data Key (AES-256, 32 bytes);
+    
+    :生成本机设备 UUID;
+    :用本机公钥加密 Data Key，\n存入 devices 表 (is_current = true);
+    :将设备信息写入本地 devices 表;
+    
+    if (是否配置服务器同步?) then (是)
+        :向服务器注册设备\nPOST /register;
+        if (服务器响应 authorized?) then (是，首个设备)
+            :直接获得授权，同步就绪;
+        else (待授权)
+            :提示设备已注册，\n需要已授权设备确认;
+        endif
+    else (否)
+        :跳过服务器注册;
+    endif
+    
+    :初始化完成，进入主界面;
+    stop
+endif
+
+@enduml
