@@ -58,7 +58,7 @@ package "服务器端" {
         + device_name: TEXT
         + signature: TEXT
         + registered_at: TIMESTAMP
-        + is_authed: BOOL
+        + is_authorized: BOOL
     }
 
     class encrypted_data_keys {
@@ -74,8 +74,8 @@ package "服务器端" {
         + encrypted_blob: TEXT
         + sync_version: INTEGER
         + operation: TEXT <<create/update/delete>>
-        + client_updated_at: TIMESTAMP
-        + server_updated_at: TIMESTAMP
+        + client_modified_at: TIMESTAMP
+        + server_modified_at: TIMESTAMP
     }
 
     registered_devices "1" -- "1" encrypted_data_keys

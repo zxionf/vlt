@@ -123,9 +123,9 @@ pub async fn get_all_passwords(pool: &SqlitePool) -> Vec<Password> {
 
 pub async fn find_by_prefix(pool: &SqlitePool, prefix: &str) -> Vec<Password> {
     let query = r#"
-        SELECT id, title, username, encrypted_password, encrypted_notes, url, device_id, created_at, updated_at
+        SELECT *
         FROM passwords
-        WHERE title LIKE ? || '%'
+        WHERE id LIKE ? || '%'
     "#;
 
     match sqlx::query_as::<_, Password>(query)

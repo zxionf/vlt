@@ -1,5 +1,36 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(sqlx::FromRow, Debug)]
+#[allow(dead_code)]
+pub struct RegisteredDevice{
+    pub device_id: String,
+    pub device_name: String,
+    pub public_key: String,
+    pub signature: String,
+    pub registered_at: i64,
+    pub is_authorized: bool,
+}
+
+#[allow(dead_code)]
+pub struct EncryptedDataKey{
+    pub device_id: String,
+    pub encrypted_data_key: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[allow(dead_code)]
+pub struct SyncRecord{
+    pub record_id: String,
+    pub device_id: String,
+    pub encrypted_blob: String,
+    pub sync_version: i32,
+    pub operation: String,
+    pub client_modified_at: i64,
+    pub server_modified_at: i64,
+}
+
+
 #[derive(Debug, Deserialize)]
 pub struct RegisterDeviceRequest {
     pub device_id: String,      // uuid

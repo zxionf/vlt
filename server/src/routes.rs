@@ -38,8 +38,9 @@ async fn register_device(
     if count == 0 {
         // 第一个设备，直接注册并授权
         let result = sqlx::query(
-            "INSERT INTO registered_devices (device_id, device_name, public_key, signature) VALUES (?, ?, ?, ?)"
+            "INSERT INTO registered_devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, ?, ?, ?, ?, ?)"
         ).bind(&r.device_id).bind(&r.device_name).bind(&r.public_key).bind(&r.signature)
+        .bind(chrono::Local::now().timestamp_millis()).bind(1)
         .execute(&state.db)
         .await;
 
@@ -68,16 +69,16 @@ async fn get_device(
     path: web::Path<String>,
 ) -> HttpResponse {
     let id = path.into_inner();
-    let row = sqlx::query("SELECT device_id, device_name, public_key, encrypted_data_key, created_at FROM devices WHERE device_id = ?")
+    let row = sqlx::query_as::<_,RegisteredDevice>("SELECT * FROM registered_devices WHERE device_id = ?")
         .bind(&id).fetch_optional(&state.db).await;
 
     match row {
         Ok(Some(r)) => {
             let device = serde_json::json!({
-                "device_id": r.get::<String,_>(0),
-                "device_name": r.get::<String,_>(1),
-                "public_key": r.get::<String,_>(2),
-                "encrypted_data_key": r.get::<String,_>(3),
+                "device_id": &r.device_id,
+                "device_name": &r.device_name,
+                "public_key": &r.public_key,
+                // "encrypted_data_key": r.get::<String,_>(3),
             });
             HttpResponse::Ok().json(device)
         }

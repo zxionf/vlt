@@ -3,6 +3,7 @@ mod models;
 mod db;
 mod query;
 
+use serde::de;
 use sqlx::{sqlite::{SqlitePool, SqlitePoolOptions}};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -109,7 +110,7 @@ async fn main() {
         Commands::Delete { id_prefix } => cmd_delete(&pool, &id_prefix),
         Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&pool, &id_prefix, title, username, passwd, url, notes),
         Commands::Test => cmd_test(&server),
-        Commands::Regist => cmd_regist(&pool, &server),
+        Commands::Regist => cmd_regist(&pool, &server).await,
         Commands::Upload => cmd_upload(&pool, &server),
         Commands::Download => cmd_download(&pool, &server),
     }
@@ -194,18 +195,21 @@ fn cmd_test(server: &str) {
     }
 }
 
-fn cmd_regist(pool: &SqlitePool, server: &str) {
-    let client = reqwest::blocking::Client::new();
+async fn cmd_regist(pool: &SqlitePool, server: &str) {
+    if !query::is_initialized(&pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
+    let client = reqwest::Client::new();
+    let device = query::get_device(pool).await.unwrap();
+
     let payload = serde_json::json!({
-        "device_id": "cli",
-        "device_name": "cli",
-        "public_key": "BEGIN",
-        "signature": "abc",
+        "device_id": &device.device_id,
+        "device_name": &device.device_name,
+        "public_key": &device.public_key,
+        "signature": "", // TODO 计算签名
     });
-    match client.post(format!("{}/api/register", server)).json(&payload).send() {
+    match client.post(format!("{}/api/register", server)).json(&payload).send().await {
         Ok(r) => {
             eprint!("{:#?}\n",r);
-            eprint!("{}",r.text().unwrap())
+            eprint!("{}",r.text().await.unwrap())
         }
         Err(e) => { eprintln!("{:?}",e); }
     }

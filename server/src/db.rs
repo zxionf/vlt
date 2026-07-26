@@ -9,8 +9,8 @@ pub async fn migrate(pool: &SqlitePool) {
             public_key TEXT NOT NULL,
             device_name TEXT NOT NULL,
             signature TEXT,
-            registered_at TEXT DEFAULT (datetime('now')),
-            is_authed INTEGER NOT NULL DEFAULT 0
+            registered_at INTEGER NOT NULL,
+            is_authorized INTEGER NOT NULL DEFAULT 0
         )"
     ).execute(pool).await.ok();
 
@@ -31,8 +31,8 @@ pub async fn migrate(pool: &SqlitePool) {
             encrypted_blob TEXT NOT NULL,
             sync_version INTEGER NOT NULL DEFAULT 1,
             operation TEXT NOT NULL CHECK(operation IN ('create','update','delete')),
-            client_updated_at INTEGER NOT NULL,
-            server_updated_at TEXT DEFAULT (datetime('now')),
+            client_modified_at INTEGER NOT NULL,
+            server_modified_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (device_id) REFERENCES registered_devices(device_id)
         )"
     ).execute(pool).await.ok();
