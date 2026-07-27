@@ -25,6 +25,9 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
     private val _tagMap = MutableStateFlow<Map<String, List<Tag>>>(emptyMap())
     val tagMap: StateFlow<Map<String, List<Tag>>> = _tagMap.asStateFlow()
 
+    private val _selectedTagId = MutableStateFlow<Long?>(null)
+    val selectedTagId: StateFlow<Long?> = _selectedTagId.asStateFlow()
+
     init {
         loadItems()
         loadTags()
@@ -96,5 +99,9 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
             repository.setTagsForPassword(passwordId, tagNames)
             refreshTagMap()
         }
+    }
+
+    fun setSelectedTag(tagId: Long?) {
+        _selectedTagId.value = if (_selectedTagId.value == tagId) null else tagId
     }
 }

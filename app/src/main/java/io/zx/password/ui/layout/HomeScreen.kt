@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +30,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -117,6 +120,15 @@ private fun HomeScaffold(
     var detailItem by remember { mutableStateOf<PasswordEntry?>(null) }
     var showHelp by remember { mutableStateOf<Boolean>(false) }
     val tagMap by viewModel.tagMap.collectAsState()
+    val allTags by viewModel.allTags.collectAsState()
+    val selectedTagId by viewModel.selectedTagId.collectAsState()
+    val filteredItems = if (selectedTagId == null) {
+        items
+    } else {
+        items.filter { item ->
+            tagMap[item.id]?.any { it.id == selectedTagId } == true
+        }
+    }
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -158,7 +170,30 @@ private fun HomeScaffold(
                     onClick = { showHelp = true }
                 )
             }
-            items(items, key = { it.id }) { item ->
+            if (allTags.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedTagId == null,
+                            onClick = { viewModel.setSelectedTag(null) },
+                            label = { Text("全部") }
+                        )
+                        allTags.forEach { tag ->
+                            FilterChip(
+                                selected = selectedTagId == tag.id,
+                                onClick = { viewModel.setSelectedTag(tag.id) },
+                                label = { Text(tag.name) }
+                            )
+                        }
+                    }
+                }
+            }
+            items(filteredItems, key = { it.id }) { item ->
                 PwdItemCard(
                     title = item.title,
                     subtitle = item.username,
