@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +29,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
 import io.zx.password.PasswordEntry
+import io.zx.password.PwdViewModel
+import io.zx.password.PwdViewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +41,7 @@ fun MainScreen() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var editingItem by remember { mutableStateOf<PasswordEntry?>(null) }
+    val viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
 
     Scaffold(
         bottomBar = {
@@ -50,7 +55,7 @@ fun MainScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            NavigationGraph(navController, editingItem) { editingItem = it }
+            NavigationGraph(navController, editingItem, viewModel) { editingItem = it }
         }
     }
 }
@@ -108,6 +113,7 @@ fun BottomNavigationBar(navController: NavController) {
 fun NavigationGraph(
     navController: NavHostController,
     editingItem: PasswordEntry?,
+    viewModel: PwdViewModel,
     setEditingItem: (PasswordEntry?) -> Unit
 ) {
     NavHost(
@@ -124,7 +130,8 @@ fun NavigationGraph(
                 onEditItem = { item ->
                     setEditingItem(item)
                     navController.navigate("create_password")
-                }
+                },
+                viewModel = viewModel
             )
         }
         composable("create_password") {
@@ -133,11 +140,12 @@ fun NavigationGraph(
                 onBack = {
                     setEditingItem(null)
                     navController.popBackStack()
-                }
+                },
+                viewModel = viewModel
             )
         }
         composable(BottomNavItem.Search.route) {
-            SearchScreen()
+            SearchScreen(viewModel = viewModel)
         }
         composable(BottomNavItem.Setting.route) {
             SettingScreen()

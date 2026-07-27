@@ -47,6 +47,7 @@ import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
 import io.zx.password.crypto.SessionManager
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -96,10 +97,11 @@ fun CreatePasswordScreen(
 
     LaunchedEffect(editItem) {
         if (editItem != null) {
-            viewModel.tagMap.collect { map ->
-                val tags = map[editItem.id]
-                if (tags != null) tagList = tags.map { it.name }
-                return@collect
+            val tags = viewModel.tagMap
+                .first { map -> map.containsKey(editItem.id) }
+                .let { map -> map[editItem.id] }
+            if (tags != null) {
+                tagList = tags.map { it.name }
             }
         }
     }

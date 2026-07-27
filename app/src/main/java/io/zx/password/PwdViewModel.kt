@@ -36,6 +36,7 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
                 Log.d("PwdViewModel", "Loaded ${itemList.size} items")
                 _uiState.value = UiState.Success(itemList)
                 _items.value = itemList
+                refreshTagMap()
             }
         }
     }
@@ -53,12 +54,10 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
         viewModelScope.launch {
             val map = mutableMapOf<String, List<Tag>>()
             for (item in _items.value) {
-                repository.getTagsForPassword(item.id).collect { tags ->
-                    map[item.id] = tags
-                    _tagMap.value = map.toMap()
-                    return@collect
-                }
+                val tags = repository.getTagsForPassword(item.id).first()
+                map[item.id] = tags
             }
+            _tagMap.value = map
         }
     }
 

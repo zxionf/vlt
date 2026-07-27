@@ -116,6 +116,7 @@ private fun HomeScaffold(
 ) {
     var detailItem by remember { mutableStateOf<PasswordEntry?>(null) }
     var showHelp by remember { mutableStateOf<Boolean>(false) }
+    val tagMap by viewModel.tagMap.collectAsState()
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -161,13 +162,12 @@ private fun HomeScaffold(
                 PwdItemCard(
                     title = item.title,
                     subtitle = item.username,
-                    tags = listOf(),
+                    tags = tagMap[item.id]?.map { it.name } ?: emptyList(),
                     onClick = { detailItem = item }
                 )
             }
         }
 
-        val tagMap by viewModel.tagMap.collectAsState()
         detailItem?.let { item ->
             PasswordDetailDialog(
                 item = item,
