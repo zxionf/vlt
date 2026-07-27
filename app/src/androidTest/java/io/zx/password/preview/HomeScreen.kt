@@ -14,11 +14,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.zx.password.PasswordEntry
+import io.zx.password.ui.component.PasswordDetailDialog
 import io.zx.password.ui.layout.PwdItemCard
 import io.zx.password.ui.layout.PwdItemIconCard
 import io.zx.password.ui.theme.LocalThemeState
 import io.zx.password.ui.theme.ThemeMode
 import io.zx.password.ui.theme.ThemeState
+import kotlin.collections.map
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(
@@ -31,6 +35,20 @@ fun PreviewHomeScreen() {
     val previewThemeState = ThemeState(
         themeMode = ThemeMode.DARK,
         onThemeModeChange = {}
+    )
+    val testEntry = PasswordEntry(
+        id = "550e8400-e29b-41d4-a716-446655440000",
+        title = "Google",
+        username = "user@gmail.com",
+        encryptedPassword = "c2FsdF9pdl9hbmRfY2lwaGVydGV4dA==", // 示例 Base64 格式
+        encryptedNotes = null,
+        url = "https://accounts.google.com",
+        createdDeviceId = "device-001",
+        lastModifiedDeviceId = "device-001",
+        createdAt = System.currentTimeMillis(),
+        updatedAt = System.currentTimeMillis(),
+        syncVersion = 1,
+        isDeleted = false
     )
     CompositionLocalProvider(LocalThemeState provides previewThemeState) {
         LazyColumn(
@@ -58,5 +76,12 @@ fun PreviewHomeScreen() {
                 )
             }
         }
+        PasswordDetailDialog(
+            item = testEntry,
+            onDismiss = { },
+            onEdit = { },
+            onDelete = { },
+            tags = listOf("学校")
+        )
     }
 }

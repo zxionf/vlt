@@ -33,6 +33,7 @@ class PwdItemCardTest {
                     PwdItemCard(
                         title = "标题",
                         subtitle = "sd",
+                        tags = listOf(),
                         onClick = {})
                 }
             }

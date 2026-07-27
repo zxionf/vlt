@@ -1,5 +1,6 @@
 package io.zx.password.ui.component
 
+import android.widget.Toast
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
@@ -18,15 +19,18 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,14 +62,14 @@ fun PasswordDetailDialog(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
-    val decryptedPasswd = remember(item.id) {
+    val decryptedPassword = remember(item.id, item.encryptedPassword) {
         try {
             SessionManager.decrypt(item.encryptedPassword)
         } catch (e: Exception) {
             "[解密失败]"
         }
     }
-    val decryptedNotes = remember(item.id) {
+    val decryptedNotes = remember(item.id, item.encryptedNotes) {
         item.encryptedNotes?.let { enc ->
             try {
                 SessionManager.decrypt(enc)
@@ -73,6 +77,14 @@ fun PasswordDetailDialog(
                 "[解密失败]"
             }
         }
+    }
+
+    var showPassword by remember { mutableStateOf(false) }
+    val displayPassword = if (showPassword) {
+        decryptedPassword
+    } else {
+        "●".repeat(decryptedPassword.length.coerceAtMost(16)) +
+                if (decryptedPassword.length > 16) "…" else ""
     }
 
     fun authenticateThenDelete() {
@@ -110,6 +122,11 @@ fun PasswordDetailDialog(
         prompt.authenticate(info)
     }
 
+    fun copyToClipboard(text: String) {
+        clipboard.setText(AnnotatedString(text))
+        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -127,43 +144,96 @@ fun PasswordDetailDialog(
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {
+                // 标题
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                DetailField("用户名", item.username) {
-                    clipboard.setText(AnnotatedString(item.username))
-                }
-                DetailField("密码", decryptedPasswd) {
-                    clipboard.setText(AnnotatedString(decryptedPasswd))
-                }
-                if (!item.url.isNullOrBlank()) DetailField("网址", item.url) {
-                    clipboard.setText(AnnotatedString(item.url!!))
-                }
-                if (!decryptedNotes.isNullOrBlank()) DetailField("备注", decryptedNotes) {
-                    clipboard.setText(AnnotatedString(decryptedNotes!!))
-                }
-                DetailField("创建时间", formatTimestamp(item.createdAt)) {}
-                DetailField("更新时间", formatTimestamp(item.updatedAt)) {}
+                // ----- 基本信息 -----
+                Text(
+                    text = "基本信息",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Divider(modifier = Modifier.padding(vertical = 4.dp))
 
+                DetailField(
+                    label = "用户名",
+                    value = item.username,
+                    onCopy = { copyToClipboard(item.username) }
+                )
+
+                DetailField(
+                    label = "密码",
+                    value = displayPassword,
+                    onCopy = { copyToClipboard(decryptedPassword) },
+                    trailingIcon = {
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(
+                                if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (showPassword) "隐藏密码" else "显示密码"
+                            )
+                        }
+                    }
+                )
+
+                if (!item.url.isNullOrBlank()) {
+                    DetailField(
+                        label = "网址",
+                        value = item.url,
+                        onCopy = { copyToClipboard(item.url!!) }
+                    )
+                }
+
+                if (!decryptedNotes.isNullOrBlank()) {
+                    DetailField(
+                        label = "备注",
+                        value = decryptedNotes,
+                        onCopy = { copyToClipboard(decryptedNotes!!) }
+                    )
+                }
+
+                // ----- 元数据 -----
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "元数据",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Divider(modifier = Modifier.padding(vertical = 4.dp))
+
+                DetailField("创建时间", formatTimestamp(item.createdAt), onCopy = {})
+                DetailField("更新时间", formatTimestamp(item.updatedAt), onCopy = {})
+
+                // ----- 标签 -----
                 if (tags.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        tags.forEach { tag ->
+                        tags.take(3).forEach { tag ->
                             SuggestionChip(
-                                onClick = { },
+                                onClick = { /* 可扩展：点击按标签筛选 */ },
                                 label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                        if (tags.size > 3) {
+                            Text(
+                                text = "+${tags.size - 3}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
+
                 Spacer(modifier = Modifier.height(20.dp))
 
+                // 编辑按钮
                 OutlinedButton(
                     onClick = { onEdit(item) },
                     modifier = Modifier.fillMaxWidth()
@@ -176,11 +246,17 @@ fun PasswordDetailDialog(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("编辑")
                 }
+
                 Spacer(modifier = Modifier.height(8.dp))
-                TextButton(
+
+                // 删除按钮（危险色）
+                Button(
                     onClick = { authenticateThenDelete() },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
                 ) {
                     Icon(
                         Icons.Default.Delete,
@@ -196,13 +272,20 @@ fun PasswordDetailDialog(
 }
 
 @Composable
-private fun DetailField(label: String, value: String, onCopy: () -> Unit) {
+private fun DetailField(
+    label: String,
+    value: String,
+    onCopy: () -> Unit,
+    trailingIcon: @Composable (() -> Unit)? = null
+) {
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
-            delay(1500); copied = false
+            delay(1500)
+            copied = false
         }
     }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -217,7 +300,15 @@ private fun DetailField(label: String, value: String, onCopy: () -> Unit) {
             )
             Text(text = value, style = MaterialTheme.typography.bodyLarge)
         }
-        IconButton(onClick = { onCopy(); copied = true }) {
+
+        if (trailingIcon != null) {
+            trailingIcon()
+        }
+
+        IconButton(onClick = {
+            onCopy()
+            copied = true
+        }) {
             Icon(
                 imageVector = if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
                 contentDescription = if (copied) "已复制" else "复制",
