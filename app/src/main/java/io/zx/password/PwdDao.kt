@@ -53,6 +53,8 @@ interface TagDao {
         WHERE ptj.passwordId = :passwordId
     """)
     fun getTagsForPassword(passwordId: String): Flow<List<Tag>>
+    @Query("SELECT * FROM password_tag_join")
+    suspend fun getAllJoins(): List<PasswordTagJoin>
 }
 
 @Dao

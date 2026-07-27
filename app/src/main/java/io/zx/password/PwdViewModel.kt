@@ -132,4 +132,10 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
             repository.deleteTag(tag)
         }
     }
+    fun exportData(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val json = repository.exportAllData()
+            onResult(json)
+        }
+    }
 }

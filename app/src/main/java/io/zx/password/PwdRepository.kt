@@ -1,5 +1,6 @@
 package io.zx.password
 
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 
 class PwdRepository(
@@ -50,5 +51,54 @@ class PwdRepository(
 
     suspend fun getCurrentDeviceId(): String? {
         return deviceDao.getCurrentDevice()?.deviceId
+    }
+    suspend fun exportAllData(): String {
+        val passwords = dao.getAll().first()
+        val tags = tagDao.getAll().first()
+        val joins = tagDao.getAllJoins()
+        val devices = deviceDao.getAll().first()
+
+        val root = org.json.JSONObject()
+        root.put("version", 1)
+        root.put("exportedAt", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).format(java.util.Date()))
+        root.put("passwords", org.json.JSONArray(passwords.map { p ->
+            org.json.JSONObject().apply {
+                put("id", p.id)
+                put("title", p.title)
+                put("username", p.username)
+                put("encryptedPassword", p.encryptedPassword)
+                put("encryptedNotes", p.encryptedNotes ?: org.json.JSONObject.NULL)
+                put("url", p.url ?: org.json.JSONObject.NULL)
+                put("createdDeviceId", p.createdDeviceId)
+                put("lastModifiedDeviceId", p.lastModifiedDeviceId)
+                put("createdAt", p.createdAt)
+                put("updatedAt", p.updatedAt)
+                put("syncVersion", p.syncVersion)
+                put("isDeleted", p.isDeleted)
+            }
+        }))
+        root.put("tags", org.json.JSONArray(tags.map { t ->
+            org.json.JSONObject().apply {
+                put("id", t.id)
+                put("name", t.name)
+            }
+        }))
+        root.put("passwordTagJoins", org.json.JSONArray(joins.map { j ->
+            org.json.JSONObject().apply {
+                put("passwordId", j.passwordId)
+                put("tagId", j.tagId)
+            }
+        }))
+        root.put("devices", org.json.JSONArray(devices.map { d ->
+            org.json.JSONObject().apply {
+                put("deviceId", d.deviceId)
+                put("deviceName", d.deviceName)
+                put("publicKey", d.publicKey)
+                put("encryptedDataKey", d.encryptedDataKey ?: org.json.JSONObject.NULL)
+                put("isCurrentDevice", d.isCurrentDevice)
+                put("createdAt", d.createdAt)
+            }
+        }))
+        return root.toString(2)
     }
 }

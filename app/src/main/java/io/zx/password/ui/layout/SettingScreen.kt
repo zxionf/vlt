@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
@@ -66,6 +67,11 @@ fun SettingScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val themeState = LocalThemeState.current
+
+
+    fun doExport() {
+
+    }
 
     val viewModel: SettingsViewModel = viewModel(
         factory = ViewModelProvider.AndroidViewModelFactory(context.applicationContext as Application)
@@ -167,6 +173,14 @@ fun SettingScreen() {
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+        // 数据导出
+        SettingItem(
+            icon = Icons.Default.DownloadForOffline,
+            title = "导出数据",
+            subtitle = "将所有数据导出为 JSON 文件",
+            onClick = { doExport() }
+        )
 
     }
 }
