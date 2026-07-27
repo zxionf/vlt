@@ -63,29 +63,17 @@ fun PasswordDetailDialog(
     val context = LocalContext.current
 
     val decryptedPassword = remember(item.id, item.encryptedPassword) {
-        try {
-            SessionManager.decrypt(item.encryptedPassword)
-        } catch (e: Exception) {
-            "[解密失败]"
-        }
+        try { SessionManager.decrypt(item.encryptedPassword) } catch (e: Exception) { "[解密失败]" }
     }
     val decryptedNotes = remember(item.id, item.encryptedNotes) {
         item.encryptedNotes?.let { enc ->
-            try {
-                SessionManager.decrypt(enc)
-            } catch (e: Exception) {
-                "[解密失败]"
-            }
+            try { SessionManager.decrypt(enc) } catch (e: Exception) { "[解密失败]" }
         }
     }
 
     var showPassword by remember { mutableStateOf(false) }
-    val displayPassword = if (showPassword) {
-        decryptedPassword
-    } else {
-        "●".repeat(decryptedPassword.length.coerceAtMost(16)) +
-                if (decryptedPassword.length > 16) "…" else ""
-    }
+    // 修改点 1：密码隐藏时固定显示 6 个点
+    val displayPassword = if (showPassword) decryptedPassword else "●●●●●●"
 
     fun authenticateThenDelete() {
         val activity = context as FragmentActivity
@@ -105,7 +93,6 @@ fun PasswordDetailDialog(
                     onDelete(item)
                     onDismiss()
                 }
-
                 override fun onAuthenticationFailed() {}
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {}
             }
@@ -135,28 +122,18 @@ fun PasswordDetailDialog(
             usePlatformDefaultWidth = true
         )
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
             Column(
                 modifier = Modifier
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 // 标题
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.headlineSmall
-                )
+                Text(text = item.title, style = MaterialTheme.typography.headlineSmall)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // ----- 基本信息 -----
-                Text(
-                    text = "基本信息",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Text("基本信息", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Divider(modifier = Modifier.padding(vertical = 4.dp))
 
                 DetailField(
@@ -197,15 +174,20 @@ fun PasswordDetailDialog(
 
                 // ----- 元数据 -----
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "元数据",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Text("元数据", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Divider(modifier = Modifier.padding(vertical = 4.dp))
 
-                DetailField("创建时间", formatTimestamp(item.createdAt), onCopy = {})
-                DetailField("更新时间", formatTimestamp(item.updatedAt), onCopy = {})
+                // 修改点 2：onCopy 传入 null，不显示复制按钮
+                DetailField(
+                    label = "创建时间",
+                    value = formatTimestamp(item.createdAt),
+                    onCopy = null
+                )
+                DetailField(
+                    label = "更新时间",
+                    value = formatTimestamp(item.updatedAt),
+                    onCopy = null
+                )
 
                 // ----- 标签 -----
                 if (tags.isNotEmpty()) {
@@ -217,7 +199,7 @@ fun PasswordDetailDialog(
                     ) {
                         tags.take(3).forEach { tag ->
                             SuggestionChip(
-                                onClick = { /* 可扩展：点击按标签筛选 */ },
+                                onClick = { /* 可扩展 */ },
                                 label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
                             )
                         }
@@ -234,22 +216,15 @@ fun PasswordDetailDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // 编辑按钮
-                OutlinedButton(
-                    onClick = { onEdit(item) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
+                OutlinedButton(onClick = { onEdit(item) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("编辑")
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 删除按钮（危险色）
+                // 删除按钮
                 Button(
                     onClick = { authenticateThenDelete() },
                     modifier = Modifier.fillMaxWidth(),
@@ -258,11 +233,7 @@ fun PasswordDetailDialog(
                         contentColor = MaterialTheme.colorScheme.onError
                     )
                 ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("删除")
                 }
@@ -275,7 +246,7 @@ fun PasswordDetailDialog(
 private fun DetailField(
     label: String,
     value: String,
-    onCopy: () -> Unit,
+    onCopy: (() -> Unit)?,          // 改为可空，null 时不显示复制按钮
     trailingIcon: @Composable (() -> Unit)? = null
 ) {
     var copied by remember { mutableStateOf(false) }
@@ -305,16 +276,19 @@ private fun DetailField(
             trailingIcon()
         }
 
-        IconButton(onClick = {
-            onCopy()
-            copied = true
-        }) {
-            Icon(
-                imageVector = if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
-                contentDescription = if (copied) "已复制" else "复制",
-                modifier = Modifier.size(20.dp),
-                tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        // 只有当 onCopy 不为 null 时才显示复制按钮
+        if (onCopy != null) {
+            IconButton(onClick = {
+                onCopy()
+                copied = true
+            }) {
+                Icon(
+                    imageVector = if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                    contentDescription = if (copied) "已复制" else "复制",
+                    modifier = Modifier.size(20.dp),
+                    tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
