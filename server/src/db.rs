@@ -6,9 +6,9 @@ pub async fn migrate(pool: &SqlitePool) {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS registered_devices (
             device_id TEXT PRIMARY KEY,
-            public_key TEXT NOT NULL,
             device_name TEXT NOT NULL,
-            signature TEXT,
+            public_key TEXT NOT NULL,
+            signature TEXT NOT NULL DEFAULT '',
             registered_at INTEGER NOT NULL,
             is_authorized INTEGER NOT NULL DEFAULT 0
         )"
@@ -16,11 +16,12 @@ pub async fn migrate(pool: &SqlitePool) {
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS encrypted_data_keys (
-            device_id TEXT PRIMARY KEY,
+            target_device_id TEXT NOT NULL,
             encrypted_data_key TEXT NOT NULL,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now')),
-            FOREIGN KEY (device_id) REFERENCES registered_devices(device_id)
+            encrypted_by_device TEXT,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (target_device_id, encrypted_by_device),
+            FOREIGN KEY (target_device_id) REFERENCES registered_devices(device_id)
         )"
     ).execute(pool).await.ok();
 
@@ -30,9 +31,9 @@ pub async fn migrate(pool: &SqlitePool) {
             device_id TEXT NOT NULL,
             encrypted_blob TEXT NOT NULL,
             sync_version INTEGER NOT NULL DEFAULT 1,
-            operation TEXT NOT NULL CHECK(operation IN ('create','update','delete')),
+            operation TEXT NOT NULL DEFAULT 'create' CHECK(operation IN ('create','update','delete')),
             client_modified_at INTEGER NOT NULL,
-            server_modified_at TEXT DEFAULT (datetime('now')),
+            server_modified_at INTEGER NOT NULL,
             FOREIGN KEY (device_id) REFERENCES registered_devices(device_id)
         )"
     ).execute(pool).await.ok();

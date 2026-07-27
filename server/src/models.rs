@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Clone)]
 #[allow(dead_code)]
-pub struct RegisteredDevice{
+pub struct RegisteredDevice {
     pub device_id: String,
     pub device_name: String,
     pub public_key: String,
@@ -11,32 +11,21 @@ pub struct RegisteredDevice{
     pub is_authorized: bool,
 }
 
+#[derive(sqlx::FromRow, Debug)]
 #[allow(dead_code)]
-pub struct EncryptedDataKey{
-    pub device_id: String,
+pub struct EncryptedDataKey {
+    pub target_device_id: String,
     pub encrypted_data_key: String,
+    pub encrypted_by_device: Option<String>,
     pub created_at: i64,
-    pub updated_at: i64,
 }
-
-#[allow(dead_code)]
-pub struct SyncRecord{
-    pub record_id: String,
-    pub device_id: String,
-    pub encrypted_blob: String,
-    pub sync_version: i32,
-    pub operation: String,
-    pub client_modified_at: i64,
-    pub server_modified_at: i64,
-}
-
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterDeviceRequest {
-    pub device_id: String,      // uuid
-    pub device_name: String,    
-    pub public_key: String,     // base64 RSA 公钥
-    pub signature: String,      // 设备签名
+    pub device_id: String,
+    pub device_name: String,
+    pub public_key: String,
+    pub signature: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,21 +35,26 @@ pub struct AuthorizeDeviceRequest {
     pub encrypted_data_key: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SyncPasswordRequest {
-    pub id: String,
-    pub encrypted_password: String,
-    pub encrypted_notes: Option<String>,
-    pub url: Option<String>,
-    pub created_device_id: String,
-    pub last_modified_device_id: String,
-    pub created_at: i64,
-    pub updated_at: i64,
+#[derive(Debug, Deserialize)]
+pub struct SyncPushRecord {
+    pub record_id: String,
+    pub device_id: String,
+    pub encrypted_blob: String,
     pub sync_version: i32,
-    pub is_deleted: bool,
+    #[serde(default)]
+    pub client_updated_at: i64,
+    #[serde(default)]
+    pub operation: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct BatchSyncRequest {
-    pub records: Vec<SyncPasswordRequest>,
+    pub records: Vec<SyncPushRecord>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PendingDevice {
+    pub device_id: String,
+    pub device_name: String,
+    pub public_key: String,
 }

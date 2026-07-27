@@ -91,6 +91,9 @@ enum Commands {
     /// test
     Test,
 
+    /// 显示本机设备信息
+    Info,
+
     /// 注册
     Regist,
 
@@ -99,6 +102,15 @@ enum Commands {
 
     /// 从服务器下载
     Download,
+
+    /// 已授权设备：授权新设备（拉取公钥，加密 Data Key，上传）
+    Authorize {
+        /// 目标设备 ID
+        target_device_id: String,
+    },
+
+    /// 新设备：拉取本机加密的 Data Key 并导入
+    SyncKey,
 
     Export {
         #[arg(short = 'o', long = "output")]
@@ -133,7 +145,7 @@ async fn main() {
 
     db::migrate(&pool).await;
 
-    let needs_unlock = !matches!(cli.command, Commands::Init | Commands::Test);
+    let needs_unlock = !matches!(cli.command, Commands::Init | Commands::Test | Commands::Info);
     if needs_unlock {
         if !query::is_initialized(&pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
         let pass = if let Some(p) = cli.password {
@@ -155,9 +167,12 @@ async fn main() {
         Commands::Delete { id_prefix } => cmd_delete(&pool, &id_prefix).await,
         Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&pool, &id_prefix, title, username, passwd, url, notes).await,
         Commands::Test => cmd_test(&server),
+        Commands::Info => cmd_info(&pool).await,
         Commands::Regist => cmd_regist(&pool, &server).await,
         Commands::Upload => cmd_upload(&pool, &server).await,
         Commands::Download => cmd_download(&pool, &server).await,
+        Commands::Authorize { target_device_id } => cmd_authorize(&pool, &server, &target_device_id).await,
+        Commands::SyncKey => cmd_sync_key(&pool, &server).await,
         Commands::Export { output } => cmd_export(&pool, output).await,
         Commands::Import { file } => cmd_import(&pool, file).await,
     }
@@ -377,6 +392,18 @@ fn cmd_test(server: &str) {
     }
 }
 
+async fn cmd_info(pool: &SqlitePool) {
+    let device = query::get_device(pool).await;
+    match device {
+        Some(d) => {
+            println!("设备 ID:   {}", d.device_id);
+            println!("设备名称:  {}", d.device_name);
+            println!("公钥:      {}", d.public_key);
+        }
+        None => eprintln!("未初始化，请先运行: vlt init"),
+    }
+}
+
 async fn cmd_regist(pool: &SqlitePool, server: &str) {
     if !query::is_initialized(pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
     let client = reqwest::Client::new();
@@ -487,6 +514,88 @@ async fn cmd_download(pool: &SqlitePool, server: &str) {
         }
         Err(e) => eprintln!("下载失败: {}", e),
     }
+}
+
+async fn cmd_authorize(pool: &SqlitePool, server: &str, target_device_id: &str) {
+    let client = reqwest::Client::new();
+
+    let resp = match client.get(format!("{}/api/devices/pending", server)).send().await {
+        Ok(r) => r,
+        Err(e) => { eprintln!("获取待授权列表失败: {}", e); return; }
+    };
+
+    let body_text = resp.text().await.unwrap_or_default();
+    let pending: Vec<serde_json::Value> = match serde_json::from_str(&body_text) {
+        Ok(v) => v,
+        Err(e) => {
+            let snippet = &body_text[..body_text.len().min(500)];
+            eprintln!("解析 pending 列表失败: {} — body: {}", e, snippet);
+            return;
+        }
+    };
+
+    let target = pending.iter().find(|d| d["device_id"].as_str() == Some(target_device_id));
+    let target_pubkey = match target {
+        Some(d) => d["public_key"].as_str().unwrap_or("").to_string(),
+        None => {
+            eprintln!("目标设备不在待授权队列中");
+            eprintln!("请先在设备 B 上执行: vlt init && vlt regist -s {}", server);
+            return;
+        }
+    };
+
+    if target_pubkey.is_empty() {
+        eprintln!("无法获取目标设备的公钥");
+        return;
+    }
+
+    let data_key = match crypto::get_current_data_key() {
+        Ok(k) => k,
+        Err(e) => { eprintln!("获取 Data Key 失败: {}", e); return; }
+    };
+
+    let encrypted = match crypto::encrypt_with_public_key(&target_pubkey, &data_key) {
+        Ok(e) => e,
+        Err(e) => { eprintln!("加密 Data Key 失败: {}", e); return; }
+    };
+
+    let my_device = query::get_device(pool).await.unwrap();
+    let payload = serde_json::json!({
+        "from_device_id": my_device.device_id,
+        "to_device_id": target_device_id,
+        "encrypted_data_key": encrypted,
+    });
+
+    match client.post(format!("{}/api/authorize", server)).json(&payload).send().await {
+        Ok(r) if r.status().is_success() => {
+            println!("已授权设备: {}", target_device_id);
+        }
+        Ok(r) => eprintln!("授权失败: {}", r.status()),
+        Err(e) => eprintln!("请求失败: {:?}", e),
+    }
+}
+
+async fn cmd_sync_key(pool: &SqlitePool, server: &str) {
+    let device = query::get_device(pool).await.unwrap();
+    let client = reqwest::Client::new();
+
+    let resp = match client.get(format!("{}/api/data-key/{}", server, device.device_id)).send().await {
+        Ok(r) => r,
+        Err(e) => { eprintln!("请求失败: {}", e); return; }
+    };
+
+    let keys: Vec<serde_json::Value> = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => { eprintln!("解析失败: {}", e); return; }
+    };
+
+    if keys.is_empty() { eprintln!("暂无 Data Key 可下载"); return; }
+
+    let enc_dk = keys[0]["encrypted_data_key"].as_str().unwrap_or("");
+    if enc_dk.is_empty() { eprintln!("Data Key 为空"); return; }
+
+    query::update_device_data_key(pool, &device.device_id, enc_dk).await.ok();
+    println!("Data Key 同步完成");
 }
 
 pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {

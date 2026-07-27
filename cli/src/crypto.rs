@@ -1,14 +1,14 @@
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use rand::RngCore;
-use rsa::{Oaep, pkcs1::EncodeRsaPublicKey, pkcs8::{EncodePrivateKey, DecodePrivateKey}};
+use rsa::{Oaep, pkcs1::{EncodeRsaPublicKey, DecodeRsaPublicKey}, pkcs8::{EncodePrivateKey, DecodePrivateKey}};
 use sha2::{Sha512, Digest};
 use hmac::Hmac;
 use pbkdf2::pbkdf2;
 use sqlx::SqlitePool;
 use thiserror::Error;
 use std::sync::{Mutex, OnceLock};
-use rsa::{RsaPrivateKey, RsaPublicKey, pkcs1v15::SigningKey, signature::RandomizedSigner, signature::SignatureEncoding};
+use rsa::{RsaPrivateKey, RsaPublicKey, pkcs1v15::SigningKey, signature::{RandomizedSigner, SignatureEncoding}};
 
 use crate::query;
 
@@ -89,6 +89,19 @@ pub fn decrypt_field(encoded: &str) -> Result<String, CryptoError> {
     let cipher = Aes256Gcm::new_from_slice(&key)?;
     let plain = cipher.decrypt(Nonce::from_slice(&iv), ct.as_ref())?;
     Ok(String::from_utf8(plain)?)
+}
+
+pub fn get_current_data_key() -> Result<[u8; 32], CryptoError> {
+    get_data_key()
+}
+
+pub fn encrypt_with_public_key(pub_key_b64: &str, data: &[u8]) -> Result<String, CryptoError> {
+    let der = B64.decode(pub_key_b64)?;
+    let pub_key = RsaPublicKey::from_pkcs1_der(&der)?;
+    let mut rng = rand::thread_rng();
+    let padding = Oaep::new::<Sha512>();
+    let encrypted = pub_key.encrypt(&mut rng, padding, data)?;
+    Ok(B64.encode(encrypted))
 }
 
 pub fn sign_device(device_id: &str, public_key: &str) -> Result<String, CryptoError> {

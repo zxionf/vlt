@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use actix_cors::Cors;
@@ -12,9 +12,11 @@ mod db;
 mod models;
 mod routes;
 
+const PENDING_CAPACITY: usize = 3;
+
 pub struct AppState {
     pub db: SqlitePool,
-    pub pending_devices: Arc<Mutex<HashMap<String, RegisterDeviceRequest>>>,
+    pub pending_devices: Arc<Mutex<VecDeque<RegisterDeviceRequest>>>,
 }
 
 #[actix_web::main]
@@ -33,7 +35,7 @@ async fn main() -> std::io::Result<()> {
 
     db::migrate(&pool).await;
 
-    let pendings = Arc::new(Mutex::new(HashMap::new()));
+    let pendings = Arc::new(Mutex::new(VecDeque::with_capacity(PENDING_CAPACITY)));
     let data = web::Data::new(AppState { db: pool, pending_devices: pendings });
 
     log::info!("Starting PWD server on 0.0.0.0:8080");

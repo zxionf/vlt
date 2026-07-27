@@ -72,6 +72,13 @@ pub async fn save_device(
     Ok(())
 }
 
+pub async fn update_device_data_key(pool: &SqlitePool, device_id: &str, encrypted_data_key: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE devices SET encrypted_data_key = ?1 WHERE device_id = ?2 AND is_current_device = 1"
+    ).bind(encrypted_data_key).bind(device_id).execute(pool).await?;
+    Ok(())
+}
+
 pub async fn insert_passwd(
     pool: &SqlitePool,
     id: &str,
