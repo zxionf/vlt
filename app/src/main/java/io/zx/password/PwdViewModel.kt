@@ -138,4 +138,11 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
             onResult(json)
         }
     }
+
+    fun importData(json: String, onResult: (Int) -> Unit) {
+        viewModelScope.launch {
+            val count = repository.importAllData(json)
+            onResult(count)
+        }
+    }
 }

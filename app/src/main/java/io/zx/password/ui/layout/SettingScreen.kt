@@ -1,6 +1,12 @@
 package io.zx.password.ui.layout
 
 import android.app.Application
+import android.net.Uri
+import android.os.Environment
+import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
@@ -23,6 +29,7 @@ import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
@@ -56,10 +63,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.zx.password.PwdViewModel
+import io.zx.password.PwdViewModelFactory
 import io.zx.password.ui.theme.LocalThemeState
 import io.zx.password.ui.theme.ThemeMode
 import io.zx.password.ui.theme.ThemeState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,9 +80,88 @@ fun SettingScreen() {
     val scope = rememberCoroutineScope()
     val themeState = LocalThemeState.current
 
+    val pwdViewModel: PwdViewModel = viewModel(
+        factory = PwdViewModelFactory(context)
+    )
+
+    val permLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+    val manageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ -> }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val json = context.contentResolver.openInputStream(uri)?.use { it.reader().readText() }
+                        ?: throw Exception("无法读取文件")
+                    pwdViewModel.importData(json) { count ->
+                        scope.launch {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "导入成功，共导入 $count 条记录", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     fun doExport() {
+        scope.launch {
+            try {
+                pwdViewModel.exportData { json ->
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                val file = File("/storage/emulated/0/00/vlt_export.json")
+                                file.parentFile?.mkdirs()
+                                file.writeText(json, Charsets.UTF_8)
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "导出成功: /storage/emulated/0/00/vlt_export.json", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
+    fun ensureWritePermissionAndExport() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                doExport()
+            } else {
+                Toast.makeText(context, "请授予「所有文件访问权限」后再导出", Toast.LENGTH_SHORT).show()
+                val intent = android.content.Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                manageLauncher.launch(intent)
+            }
+        } else {
+            if (android.content.pm.PackageManager.PERMISSION_GRANTED ==
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            ) {
+                doExport()
+            } else {
+                permLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
     }
 
     val viewModel: SettingsViewModel = viewModel(
@@ -179,8 +270,16 @@ fun SettingScreen() {
             icon = Icons.Default.DownloadForOffline,
             title = "导出数据",
             subtitle = "将所有数据导出为 JSON 文件",
-            onClick = { doExport() }
+            onClick = { ensureWritePermissionAndExport() }
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        // 数据导入
+//        SettingItem(
+//            icon = Icons.Default.FileUpload,
+//            title = "导入数据",
+//            subtitle = "从 JSON 文件导入数据",
+//            onClick = { importLauncher.launch(arrayOf("application/json")) }
+//        )
 
     }
 }
