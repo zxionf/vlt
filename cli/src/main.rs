@@ -3,22 +3,53 @@ mod models;
 mod db;
 mod query;
 
-use serde::de;
 use sqlx::{sqlite::{SqlitePool, SqlitePoolOptions}};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use std::io::{self, BufRead, Write};
+
+fn read_line(prompt: &str) -> String {
+    match dialoguer::Input::<String>::new().with_prompt(prompt).interact_text() {
+        Ok(s) => s,
+        Err(_) => {
+            print!("{}: ", prompt);
+            let _ = io::stdout().flush();
+            io::stdin().lock().lines().next()
+                .and_then(|r| r.ok())
+                .unwrap_or_default()
+        }
+    }
+}
+
+fn read_pass(prompt: &str) -> String {
+    // try TTY first, fall back to stdin (for test pipes)
+    match rpassword::prompt_password(prompt) {
+        Ok(s) => return s,
+        Err(_) => {
+            print!("{}", prompt);
+            let _ = io::stdout().flush();
+            io::stdin().lock().lines().next()
+                .and_then(|r| r.ok())
+                .unwrap_or_default()
+        }
+    }
+}
 
 /// vlt — 跨平台密码管理器 CLI
 #[derive(Parser)]
 #[command(name = "vlt", version, about)]
 struct Cli {
     /// 数据库文件路径（默认 ~/.vlt/vault.db）
-    #[arg(short = 'D', long, default_value = ".")]
+    #[arg(short = 'D', long, global = true, default_value = ".")]
     db: PathBuf,
 
     /// 服务器地址
-    #[arg(short = 's', long = "server", default_value = "")]
+    #[arg(short = 's', long = "server", global = true, default_value = "")]
     server: String,
+
+    /// 主密码（非交互模式，仅用于测试）
+    #[arg(long = "password", global = true)]
+    password: Option<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -68,6 +99,16 @@ enum Commands {
 
     /// 从服务器下载
     Download,
+
+    Export {
+        #[arg(short = 'o', long = "output")]
+        output: Option<PathBuf>,
+    },
+
+    Import {
+        #[arg(short = 'f', long = "file")]
+        file: Option<PathBuf>,
+    },
 }
 
 fn default_db_path() -> PathBuf {
@@ -81,24 +122,28 @@ fn dirs_first() -> Option<PathBuf> {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    // 服务器地址优先级：命令行 > 环境变量 > 默认
     let server = if !cli.server.is_empty() { cli.server.clone() }
     else { std::env::var("VLT_SERVER").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string()) };
 
     let db_path = if cli.db.to_string_lossy() == "." { default_db_path().join("vault.db") } else { cli.db.clone() };
     if let Some(parent) = db_path.parent() { std::fs::create_dir_all(parent).ok(); }
     let url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
-    let pool  = SqlitePoolOptions::new().max_connections(1).connect(&url).await
+    let pool = SqlitePoolOptions::new().max_connections(1).connect(&url).await
         .expect("无法连接数据库");
 
     db::migrate(&pool).await;
 
-    let needs_unlock = matches!(cli.command, Commands::Add { .. } | Commands::List | Commands::Get { .. } | Commands::Edit { .. } | Commands::Upload | Commands::Delete { .. } | Commands::Download);
+    let needs_unlock = !matches!(cli.command, Commands::Init | Commands::Test);
     if needs_unlock {
         if !query::is_initialized(&pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
-        let pass = rpassword::prompt_password("主密码: ").unwrap_or_default();
-        if !crypto::verify_and_load(&pool, &pass).await.ok().unwrap() {
-            eprintln!("主密码错误"); return;
+        let pass = if let Some(p) = cli.password {
+            p
+        } else {
+            read_pass("主密码: ")
+        };
+        match crypto::verify_and_load(&pool, &pass).await {
+            Ok(true) => {}
+            _ => { eprintln!("主密码错误"); return; }
         }
     }
 
@@ -107,42 +152,47 @@ async fn main() {
         Commands::Add { title, username, passwd, url, notes } => cmd_add(&pool, title, username, passwd, url, notes).await,
         Commands::List => cmd_list(&pool).await,
         Commands::Get { id_prefix } => cmd_get(&pool, &id_prefix).await,
-        Commands::Delete { id_prefix } => cmd_delete(&pool, &id_prefix),
-        Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&pool, &id_prefix, title, username, passwd, url, notes),
+        Commands::Delete { id_prefix } => cmd_delete(&pool, &id_prefix).await,
+        Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&pool, &id_prefix, title, username, passwd, url, notes).await,
         Commands::Test => cmd_test(&server),
         Commands::Regist => cmd_regist(&pool, &server).await,
-        Commands::Upload => cmd_upload(&pool, &server),
-        Commands::Download => cmd_download(&pool, &server),
+        Commands::Upload => cmd_upload(&pool, &server).await,
+        Commands::Download => cmd_download(&pool, &server).await,
+        Commands::Export { output } => cmd_export(&pool, output).await,
+        Commands::Import { file } => cmd_import(&pool, file).await,
     }
 }
 
 async fn cmd_init(pool: &SqlitePool) {
-    if query::is_initialized(&pool).await { println!("已初始化"); return; }
-    let pw1 = rpassword::prompt_password("设置主密码: ").unwrap_or_default();
-    let pw2 = rpassword::prompt_password("确认主密码: ").unwrap_or_default();
+    if query::is_initialized(pool).await { println!("已初始化"); return; }
+    let pw1 = read_pass("设置主密码: ");
+    let pw2 = read_pass("确认主密码: ");
     if pw1 != pw2 { eprintln!("两次输入不一致"); return; }
-    let hint = dialoguer::Input::<String>::new().with_prompt("密码提示（可选）").allow_empty(true).interact_text().unwrap_or_default();
+    let hint = read_line("密码提示（可选）");
     println!("正在初始化...");
-    match crypto::initialize_vault(&pool, &pw1, &hint).await {
+    match crypto::initialize_vault(pool, &pw1, &hint).await {
         Ok(_) => println!("初始化完成"),
-        Err(e) => eprintln!("初始化失败: {}",e),
+        Err(e) => eprintln!("初始化失败: {}", e),
     };
 }
 
 async fn cmd_add(pool: &SqlitePool, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
-    if !query::is_initialized(&pool).await { eprintln!("未初始化"); return; }
-    let prompt = |label: &str| dialoguer::Input::<String>::new().with_prompt(label).interact_text().unwrap_or_default();
-    let title = title.unwrap_or_else(|| prompt("标题"));
-    let username = username.unwrap_or_else(|| prompt("用户名"));
-    let pwd = passwd.unwrap_or_else(|| rpassword::prompt_password("密码: ").unwrap_or_default());
-    let url = url.unwrap_or_else(|| prompt("网址"));
-    let notes = notes.unwrap_or_else(|| prompt("备注"));
+    let title = title.unwrap_or_else(|| read_line("标题"));
+    let username = username.unwrap_or_else(|| read_line("用户名"));
+    let pwd = passwd.unwrap_or_else(|| read_pass("密码: "));
+    let url = url.unwrap_or_else(|| read_line("网址"));
+    let notes = notes.unwrap_or_else(|| read_line("备注"));
     let id = uuid::Uuid::new_v4().to_string();
     let enc = crypto::encrypt_field(&pwd);
-    let enc_notes = if notes.is_empty() { "".to_string() } else { crypto::encrypt_field(&notes).unwrap_or_default() };
+    let enc_notes = if notes.is_empty() { None } else {
+        match crypto::encrypt_field(&notes) {
+            Ok(e) => Some(e),
+            Err(e) => { eprintln!("加密备注失败: {}", e); return; }
+        }
+    };
     let created_at = chrono::Local::now().timestamp_millis();
-    let device_id = query::get_device(&pool).await.unwrap().device_id;
-    query::insert_passwd(&pool,&id, &title, &username, &enc.unwrap(), &enc_notes, &url ,&device_id,&device_id,created_at,created_at,0,false).await;
+    let device_id = query::get_device(pool).await.unwrap().device_id;
+    query::insert_passwd(pool, &id, &title, &username, &enc.unwrap(), enc_notes.as_deref(), &url, &device_id, &device_id, created_at, created_at, 1, false).await.ok();
     println!("已添加: {} [{}]", title, &id[..8]);
 }
 
@@ -154,121 +204,289 @@ async fn cmd_list(pool: &SqlitePool) {
 
 async fn cmd_get(pool: &SqlitePool, prefix: &str) {
     let vec = query::find_by_prefix(pool, prefix).await;
-    if vec.is_empty() { println!("暂无记录"); return; }
-    let passwd = crypto::decrypt_field(&vec[0].encrypted_password);
-    let notes = vec[0].encrypted_notes.as_deref().map(|n| crypto::decrypt_field(n));
-    println!("ID:      {}", &vec[0].id);
-    println!("标题:    {}", &vec[0].title);
-    println!("用户名:  {}", &vec[0].username);
-    println!("密码:    {}", passwd.ok().unwrap());
-    println!("网址:    {}", &vec[0].url.as_deref().unwrap_or("-"));
-    println!("备注:    {}", notes.unwrap().ok().unwrap_or_default());
-    println!("创建:    {}", &vec[0].created_at);
-    println!("更新:    {}", &vec[0].updated_at);
+    if vec.is_empty() { println!("未找到匹配的记录"); return; }
+    let item = &vec[0];
+    let passwd = crypto::decrypt_field(&item.encrypted_password);
+    let notes = item.encrypted_notes.as_deref().map(|n| crypto::decrypt_field(n));
+    println!("ID:      {}", item.id);
+    println!("标题:    {}", item.title);
+    println!("用户名:  {}", item.username);
+    println!("密码:    {}", passwd.as_deref().unwrap_or("解密失败"));
+    println!("网址:    {}", item.url.as_deref().unwrap_or("-"));
+    println!("备注:    {}", notes.and_then(|r| r.ok()).unwrap_or_default());
+    println!("创建:    {}", item.created_at);
+    println!("更新:    {}", item.updated_at);
 }
 
-fn cmd_delete(pool: &SqlitePool, prefix: &str) {
-    // let Some(record) = db.find_by_prefix(prefix) else { eprintln!("未找到"); return; };
-    // let confirm = dialoguer::Confirm::new().with_prompt(format!("删除 '{}'？", record.title)).interact().unwrap_or(false);
-    // if confirm { db.delete(&record.id); println!("已删除"); }
+async fn cmd_delete(pool: &SqlitePool, prefix: &str) {
+    let records = query::find_by_prefix(pool, prefix).await;
+    if records.is_empty() { eprintln!("未找到匹配的记录"); return; }
+    if records.len() > 1 {
+        println!("找到 {} 条匹配记录:", records.len());
+        for r in &records { println!("  {:<8}  {}", &r.id[..8], r.title); }
+        return;
+    }
+    let record = &records[0];
+    let confirm = {
+        let ans = read_line(&format!("确认删除 '{}'？[y/N] ", record.title));
+        ans.trim().eq_ignore_ascii_case("y")
+    };
+    if confirm {
+        query::delete_passwd(pool, &record.id).await;
+        println!("已删除: {}", record.title);
+    }
 }
 
-fn cmd_edit(pool: &SqlitePool, prefix: &str, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
-    // let Some(record) = db.find_by_prefix(prefix) else { eprintln!("未找到"); return; };
-    // let encrypt_if = |val: &Option<String>| val.as_ref().map(|v| crypto::encrypt_field(v));
-    // let new_enc = encrypt_if(&passwd).unwrap_or(record.encrypted_password.clone());
-    // let new_notes = if notes.is_some() { encrypt_if(&notes) } else { record.encrypted_notes.clone() };
-    // db.update(&record.id, &title.unwrap_or(record.title), &username.unwrap_or(record.username), &new_enc, &new_notes, &url.unwrap_or(record.url.unwrap_or_default()));
-    println!("✅ 已更新");
+async fn cmd_edit(pool: &SqlitePool, prefix: &str, title: Option<String>, username: Option<String>, passwd: Option<String>, url: Option<String>, notes: Option<String>) {
+    let records = query::find_by_prefix(pool, prefix).await;
+    if records.is_empty() { eprintln!("未找到匹配的记录"); return; }
+    if records.len() > 1 {
+        println!("找到 {} 条匹配记录:", records.len());
+        for r in &records { println!("  {:<8}  {}", &r.id[..8], r.title); }
+        return;
+    }
+    let record = &records[0];
+    let device_id = query::get_device(pool).await.unwrap().device_id;
+    let new_title = title.unwrap_or_else(|| record.title.clone());
+    let new_username = username.unwrap_or_else(|| record.username.clone());
+
+    let new_pwd = match passwd {
+        Some(p) => match crypto::encrypt_field(&p) {
+            Ok(e) => e,
+            Err(e) => { eprintln!("加密失败: {}", e); return; }
+        },
+        None => record.encrypted_password.clone(),
+    };
+
+    let new_url = url.unwrap_or_else(|| record.url.clone().unwrap_or_default());
+
+    let new_notes: Option<String> = match notes {
+        Some(n) if !n.is_empty() => match crypto::encrypt_field(&n) {
+            Ok(e) => Some(e),
+            Err(e) => { eprintln!("加密失败: {}", e); return; }
+        },
+        Some(_) => None,
+        None => record.encrypted_notes.clone(),
+    };
+
+    query::update_passwd(
+        pool, &record.id, &new_title, &new_username, &new_pwd,
+        new_notes.as_deref(), &new_url, &device_id,
+    ).await.ok();
+    println!("已更新: {}", new_title);
+}
+
+async fn cmd_export(pool: &SqlitePool, output: Option<PathBuf>) {
+    let items: Vec<models::Password> = query::get_all_passwords(pool).await;
+    let json = serde_json::to_string_pretty(&items.iter().map(|p| {
+        serde_json::json!({
+            "id": p.id,
+            "title": p.title,
+            "username": p.username,
+            "encrypted_password": p.encrypted_password,
+            "encrypted_notes": p.encrypted_notes,
+            "url": p.url,
+            "created_device_id": p.created_device_id,
+            "last_modified_device_id": p.last_modified_device_id,
+            "created_at": p.created_at,
+            "updated_at": p.updated_at,
+            "sync_version": p.sync_version,
+            "is_deleted": p.is_deleted,
+        })
+    }).collect::<Vec<_>>()).unwrap_or_else(|e| {
+        eprintln!("序列化失败: {}", e);
+        "[]".to_string()
+    });
+
+    match output {
+        Some(path) => {
+            if let Err(e) = std::fs::write(&path, &json) {
+                eprintln!("写入文件失败: {}", e);
+            } else {
+                println!("已导出到: {}", path.display());
+            }
+        }
+        None => println!("{}", json),
+    }
+}
+
+async fn cmd_import(pool: &SqlitePool, file: Option<PathBuf>) {
+    let json = match file {
+        Some(path) => match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => { eprintln!("读取文件失败: {}", e); return; }
+        }
+        None => {
+            use std::io::Read;
+            let mut s = String::new();
+            match std::io::stdin().read_to_string(&mut s) {
+                Ok(_) => s,
+                Err(e) => { eprintln!("读取 stdin 失败: {}", e); return; }
+            }
+        }
+    };
+
+    let items: Vec<serde_json::Value> = match serde_json::from_str(&json) {
+        Ok(v) => v,
+        Err(e) => { eprintln!("JSON 解析失败: {}", e); return; }
+    };
+
+    let device_id = query::get_device(pool).await.unwrap().device_id;
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut imported = 0;
+    for item in &items {
+        let id = item["id"].as_str().unwrap_or("");
+        if id.is_empty() { continue; }
+        let title = item["title"].as_str().unwrap_or("");
+        if title.is_empty() { continue; }
+        let existing = query::find_by_prefix(pool, id).await;
+        if !existing.is_empty() { continue; }
+
+        let enc_notes = item["encrypted_notes"].as_str().and_then(|s| if s.is_empty() { None } else { Some(s) });
+
+        query::insert_passwd(
+            pool,
+            id,
+            title,
+            item["username"].as_str().unwrap_or(""),
+            item["encrypted_password"].as_str().unwrap_or(""),
+            enc_notes,
+            item["url"].as_str().unwrap_or(""),
+            item["created_device_id"].as_str().unwrap_or(&device_id),
+            &device_id,
+            item["created_at"].as_i64().unwrap_or(now),
+            item["updated_at"].as_i64().unwrap_or(now),
+            item["sync_version"].as_i64().unwrap_or(1) as i32,
+            item["is_deleted"].as_bool().unwrap_or(false),
+        ).await.ok();
+        imported += 1;
+    }
+    println!("导入完成: {} 条记录", imported);
 }
 
 fn cmd_test(server: &str) {
     let client = reqwest::blocking::Client::new();
     match client.get(format!("{}/api/health", server)).send() {
-        Ok(r) => { 
+        Ok(r) => {
             match r.text() {
-                Ok(body) => eprint!("{}",body),
-                Err(e) => { eprintln!("{:#?}",e); }
+                Ok(body) => print!("{}", body),
+                Err(e) => eprintln!("{:#?}", e),
             }
-         }
-        Err(e) => { eprintln!("{:#?}",e); }
+        }
+        Err(e) => eprintln!("{:#?}", e),
     }
 }
 
 async fn cmd_regist(pool: &SqlitePool, server: &str) {
-    if !query::is_initialized(&pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
+    if !query::is_initialized(pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
     let client = reqwest::Client::new();
     let device = query::get_device(pool).await.unwrap();
+
+    let signature = match crypto::sign_device(&device.device_id, &device.public_key) {
+        Ok(sig) => sig,
+        Err(e) => { eprintln!("签名失败: {}", e); return; }
+    };
 
     let payload = serde_json::json!({
         "device_id": &device.device_id,
         "device_name": &device.device_name,
         "public_key": &device.public_key,
-        "signature": "", // TODO 计算签名
+        "signature": signature,
     });
     match client.post(format!("{}/api/register", server)).json(&payload).send().await {
         Ok(r) => {
-            eprint!("{:#?}\n",r);
-            eprint!("{}",r.text().await.unwrap())
+            println!("状态: {}", r.status());
+            println!("响应: {}", r.text().await.unwrap_or_default());
         }
-        Err(e) => { eprintln!("{:?}",e); }
+        Err(e) => eprintln!("请求失败: {:?}", e),
     }
 }
 
-fn cmd_upload(pool: &SqlitePool, server: &str) {
-    // let items = db.list_all();
-    // if items.is_empty() { println!("无记录可上传"); return; }
-    // let client = reqwest::blocking::Client::new();
-    // let mut uploaded = 0;
-    // let mut failed = 0;
-    // for (id, title, username, enc_pwd, enc_notes, url, _updated_at) in &items {
-    //     let payload = serde_json::json!({
-    //         "record_id": id,
-    //         "device_id": "cli",
-    //         "encrypted_blob": serde_json::json!({
-    //             "title": title, "username": username,
-    //             "encrypted_password": enc_pwd, "encrypted_notes": enc_notes, "url": url,
-    //         }).to_string(),
-    //         "sync_version": 1,
-    //         "client_updated_at": 0_i64,
-    //         "operation": "create",
-    //     });
-    //     match client.post(format!("{}/api/sync/push", server)).json(&serde_json::json!({"records": [payload]})).send() {
-    //         Ok(r) if r.status().is_success() => uploaded += 1,
-    //         Ok(r) => { eprintln!("上传 {} 失败: {}", title, r.status()); failed += 1; }
-    //         Err(e) => { eprintln!("上传 {} 失败: {}", title, e); failed += 1; }
-    //     }
-    // }
-    // println!("✅ 上传完成: {} 成功, {} 失败", uploaded, failed);
+async fn cmd_upload(pool: &SqlitePool, server: &str) {
+    let items: Vec<models::Password> = query::get_all_passwords(pool).await;
+    if items.is_empty() { println!("无记录可上传"); return; }
+    let client = reqwest::blocking::Client::new();
+    let device_id = query::get_device(pool).await.unwrap().device_id;
+    let mut uploaded = 0;
+    let mut failed = 0;
+    for item in &items {
+        let blob = serde_json::json!({
+            "title": item.title,
+            "username": item.username,
+            "encrypted_password": item.encrypted_password,
+            "encrypted_notes": item.encrypted_notes,
+            "url": item.url,
+            "created_device_id": item.created_device_id,
+        });
+        let payload = serde_json::json!({
+            "record_id": item.id,
+            "device_id": device_id,
+            "encrypted_blob": blob.to_string(),
+            "sync_version": item.sync_version,
+            "client_updated_at": item.updated_at,
+        });
+        match client.post(format!("{}/api/sync/push", server))
+            .json(&serde_json::json!({"records": [payload]}))
+            .send()
+        {
+            Ok(r) if r.status().is_success() => uploaded += 1,
+            Ok(r) => { eprintln!("上传 {} 失败: {}", item.title, r.status()); failed += 1; }
+            Err(e) => { eprintln!("上传 {} 失败: {}", item.title, e); failed += 1; }
+        }
+    }
+    println!("上传完成 {} 成功, {} 失败", uploaded, failed);
 }
 
-fn cmd_download(pool: &SqlitePool, server: &str) {
-    // let client = reqwest::blocking::Client::new();
-    // match client.get(format!("{}/api/sync/pull/0", server)).send() {
-    //     Ok(resp) => {
-    //         let records: serde_json::Value = resp.json().unwrap_or_default();
-    //         let empty: Vec<serde_json::Value> = vec![];
-    //         let arr = records.as_array().unwrap_or(&empty);
-    //         let mut inserted = 0;
-    //         for rec in arr {
-    //             let blob_str = rec["encrypted_blob"].as_str().unwrap_or("{}");
-    //             let blob: serde_json::Value = serde_json::from_str(blob_str).unwrap_or_default();
-    //             let id = rec["record_id"].as_str().unwrap_or("");
-    //             if !id.is_empty() && db.find_by_prefix(&id[..8]).is_none() {
-    //                 db.insert_passwd(id,
-    //                     blob["title"].as_str().unwrap_or(""),
-    //                     blob["username"].as_str().unwrap_or(""),
-    //                     blob["encrypted_password"].as_str().unwrap_or(""),
-    //                     &blob["encrypted_notes"].as_str().map(|s| s.to_string()),
-    //                     blob["url"].as_str().unwrap_or("")
-    //                 );
-    //                 inserted += 1;
-    //             }
-    //         }
-    //         println!("✅ 下载完成: {} 条新记录", inserted);
-    //     }
-    //     Err(e) => eprintln!("下载失败: {}", e),
-    // }
+async fn cmd_download(pool: &SqlitePool, server: &str) {
+    let client = reqwest::blocking::Client::new();
+    match client.get(format!("{}/api/sync/pull/0", server)).send() {
+        Ok(resp) => {
+            let records: serde_json::Value = match resp.json() {
+                Ok(v) => v,
+                Err(e) => { eprintln!("解析响应失败: {}", e); return; }
+            };
+            let arr = match records.as_array() {
+                Some(a) => a,
+                None => { eprintln!("响应格式错误"); return; }
+            };
+            if arr.is_empty() { println!("无新记录"); return; }
+            let device_id = query::get_device(pool).await.unwrap().device_id;
+            let mut inserted = 0;
+            for rec in arr {
+                let record_id = rec["record_id"].as_str().unwrap_or("");
+                if record_id.is_empty() { continue; }
+                let existing = query::find_by_prefix(pool, record_id).await;
+                if !existing.is_empty() { continue; }
+                let blob_str = rec["encrypted_blob"].as_str().unwrap_or("{}");
+                let blob: serde_json::Value = match serde_json::from_str(blob_str) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let created_device_id = blob["created_device_id"].as_str().unwrap_or("");
+                let now = chrono::Utc::now().timestamp_millis();
+                let enc_notes = blob["encrypted_notes"].as_str()
+                    .and_then(|s| if s.is_empty() { None } else { Some(s) });
+                query::insert_passwd(
+                    pool,
+                    record_id,
+                    blob["title"].as_str().unwrap_or(""),
+                    blob["username"].as_str().unwrap_or(""),
+                    blob["encrypted_password"].as_str().unwrap_or(""),
+                    enc_notes,
+                    blob["url"].as_str().unwrap_or(""),
+                    if created_device_id.is_empty() { &device_id } else { created_device_id },
+                    &device_id,
+                    now,
+                    now,
+                    1,
+                    false,
+                ).await.ok();
+                inserted += 1;
+            }
+            println!("下载完成: {} 条新记录", inserted);
+        }
+        Err(e) => eprintln!("下载失败: {}", e),
+    }
 }
 
 pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {

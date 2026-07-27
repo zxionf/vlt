@@ -78,7 +78,7 @@ pub async fn insert_passwd(
     title: &str,
     username: &str,
     encrypted_password: &str,
-    encrypted_notes: &str,
+    encrypted_notes: Option<&str>,
     url: &str,
     created_device_id: &str,
     last_modified_device_id: &str,
@@ -137,6 +137,47 @@ pub async fn find_by_prefix(pool: &SqlitePool, prefix: &str) -> Vec<Password> {
         Err(e) => {
             eprintln!("Failed to find passwords by prefix '{}': {}", prefix, e);
             Vec::new()
+        }
+    }
+}
+
+pub async fn update_passwd(
+    pool: &SqlitePool,
+    id: &str,
+    title: &str,
+    username: &str,
+    encrypted_password: &str,
+    encrypted_notes: Option<&str>,
+    url: &str,
+    last_modified_device_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let updated_at = chrono::Utc::now().timestamp_millis();
+    let result = sqlx::query(
+        "UPDATE passwords SET title=?1, username=?2, encrypted_password=?3, encrypted_notes=?4, url=?5, last_modified_device_id=?6, updated_at=?7, sync_version=sync_version+1 WHERE id=?8"
+    )
+        .bind(title)
+        .bind(username)
+        .bind(encrypted_password)
+        .bind(encrypted_notes)
+        .bind(url)
+        .bind(last_modified_device_id)
+        .bind(updated_at)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+pub async fn delete_passwd(pool: &SqlitePool, id: &str) -> bool {
+    match sqlx::query("DELETE FROM passwords WHERE id=?1")
+        .bind(id)
+        .execute(pool)
+        .await
+    {
+        Ok(result) => result.rows_affected() > 0,
+        Err(e) => {
+            eprintln!("删除失败: {}", e);
+            false
         }
     }
 }
