@@ -78,6 +78,8 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
 
+    implementation(libs.zxcvbn)
+
     implementation(libs.androidx.compose.foundation)
 
     testImplementation(libs.junit)

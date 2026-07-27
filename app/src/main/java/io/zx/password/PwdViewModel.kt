@@ -28,9 +28,13 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
     private val _selectedTagId = MutableStateFlow<Long?>(null)
     val selectedTagId: StateFlow<Long?> = _selectedTagId.asStateFlow()
 
+    private val _currentDeviceId = MutableStateFlow("")
+    val currentDeviceId: StateFlow<String> = _currentDeviceId.asStateFlow()
+
     init {
         loadItems()
         loadTags()
+        loadCurrentDeviceId()
     }
 
     private fun loadItems() {
@@ -50,6 +54,12 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
                 _allTags.value = tags
                 refreshTagMap()
             }
+        }
+    }
+
+    private fun loadCurrentDeviceId() {
+        viewModelScope.launch {
+            _currentDeviceId.value = repository.getCurrentDeviceId() ?: ""
         }
     }
 

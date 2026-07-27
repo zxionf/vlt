@@ -23,6 +23,7 @@ roomKtx = "2.7.1"
 foundationVersion = "1.10.6"
 animation = "1.10.6"
 animationVersion = "1.11.4"
+zxcvbn = "1.9.0"
 
 [libraries]
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
@@ -61,6 +62,7 @@ material-icons-core = { module = "androidx.compose.material:material-icons-core"
 androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundationVersion" }
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
 androidx-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animationVersion" }
+zxcvbn = { module = "com.nulab-inc:zxcvbn", version.ref = "zxcvbn" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -4,7 +4,8 @@ import kotlinx.coroutines.flow.Flow
 
 class PwdRepository(
     private val dao: PwdDao,
-    private val tagDao: TagDao
+    private val tagDao: TagDao,
+    private val deviceDao: DeviceDao
 ) {
     fun getAll(): Flow<List<PasswordEntry>> = dao.getAll()
     suspend fun insert(item: PasswordEntry) = dao.insert(item)
@@ -45,5 +46,9 @@ class PwdRepository(
 
     suspend fun deleteJoinsForPassword(passwordId: String) {
         tagDao.deleteJoinsForPassword(passwordId)
+    }
+
+    suspend fun getCurrentDeviceId(): String? {
+        return deviceDao.getCurrentDevice()?.deviceId
     }
 }

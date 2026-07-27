@@ -3,7 +3,6 @@ package io.zx.password.ui.layout
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -43,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,7 +61,6 @@ import io.zx.password.PasswordEntry
 import io.zx.password.PwdViewModel
 import io.zx.password.PwdViewModelFactory
 import io.zx.password.crypto.SessionManager
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -75,6 +74,7 @@ fun CreatePasswordScreen(
     val isEdit = editItem != null
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     // ----- 表单状态 -----
     var title by remember { mutableStateOf(editItem?.title ?: "") }
@@ -111,9 +111,8 @@ fun CreatePasswordScreen(
     var titleError by remember { mutableStateOf<String?>(null) }
     var passwdError by remember { mutableStateOf<String?>(null) }
 
-    // ----- 设备 ID（应从全局获取）-----
-//    val deviceId = remember { SessionManager.getDeviceId() }
-    val deviceId = remember {"sd"}
+    // ----- 设备 ID -----
+    val deviceId by viewModel.currentDeviceId.collectAsState()
     // ----- 编辑时加载标签 -----
     LaunchedEffect(editItem) {
         if (editItem != null) {
@@ -125,13 +124,10 @@ fun CreatePasswordScreen(
         }
     }
 
-    // ----- 密码强度（简单评分）-----
+    // ----- 密码强度（zxcvbn4j 评估）-----
+    val zxcvbn = remember { com.nulabinc.zxcvbn.Zxcvbn() }
     val passwordStrength = remember(passwd) {
-        when {
-            passwd.length < 6 -> 0
-            passwd.length < 10 -> 1
-            else -> 2
-        }
+        if (passwd.isBlank()) 0 else zxcvbn.measure(passwd).score
     }
 
     // ----- 辅助函数 -----
@@ -151,22 +147,16 @@ fun CreatePasswordScreen(
         } else {
             titleError = null
         }
-        if (passwd.isBlank()) {
-            passwdError = "密码不能为空"
-            valid = false
-        } else if (passwd.length < 6) {
-            passwdError = "密码至少 6 位"
-            valid = false
-        } else {
-            passwdError = null
-        }
         return valid
     }
 
     fun save() {
         if (isSaving) return
-        if (!validate()) return
-
+        if (title.isBlank()) {
+            titleError = "标题不能为空"
+            return
+        }
+        
         isSaving = true
         scope.launch {
             try {
@@ -200,7 +190,7 @@ fun CreatePasswordScreen(
                         )
                     )
                 }
-                snackbarHostState.showSnackbar(if (isEdit) "已更新" else "已保存")
+                android.widget.Toast.makeText(context, if (isEdit) "已更新" else "已保存", android.widget.Toast.LENGTH_SHORT).show()
                 onBack()
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("保存失败: ${e.message}")
@@ -298,13 +288,13 @@ fun CreatePasswordScreen(
                                 Text(passwdError!!)
                             } else if (passwd.isNotBlank()) {
                                 val strengthText = when (passwordStrength) {
-                                    0 -> "弱"
-                                    1 -> "中"
+                                    0, 1 -> "弱"
+                                    2 -> "中"
                                     else -> "强"
                                 }
                                 val color = when (passwordStrength) {
-                                    0 -> MaterialTheme.colorScheme.error
-                                    1 -> MaterialTheme.colorScheme.tertiary
+                                    0, 1 -> MaterialTheme.colorScheme.error
+                                    2 -> MaterialTheme.colorScheme.tertiary
                                     else -> MaterialTheme.colorScheme.primary
                                 }
                                 Text("强度: $strengthText", color = color)

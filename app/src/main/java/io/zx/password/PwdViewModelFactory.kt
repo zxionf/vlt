@@ -10,7 +10,7 @@ class PwdViewModelFactory(private val context: Context) : ViewModelProvider.Fact
             @Suppress("UNCHECKED_CAST")
             val db = PwdDB.getInstance(context)
             return PwdViewModel(
-                PwdRepository(db.PwdDao(), db.TagDao())
+                PwdRepository(db.PwdDao(), db.TagDao(), db.DeviceDao())
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
