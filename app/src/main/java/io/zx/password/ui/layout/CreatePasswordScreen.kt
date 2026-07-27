@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -33,8 +32,11 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -51,7 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -103,9 +104,9 @@ fun CreatePasswordScreen(
         )
     }
     var tagList by remember { mutableStateOf<List<String>>(emptyList()) }
-    var tagInput by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
+    var showTagMenu by remember { mutableStateOf(false) }
 
     // ----- 实时错误状态 -----
     var titleError by remember { mutableStateOf<String?>(null) }
@@ -113,6 +114,7 @@ fun CreatePasswordScreen(
 
     // ----- 设备 ID -----
     val deviceId by viewModel.currentDeviceId.collectAsState()
+    val allTags by viewModel.allTags.collectAsState()
     // ----- 编辑时加载标签 -----
     LaunchedEffect(editItem) {
         if (editItem != null) {
@@ -131,14 +133,6 @@ fun CreatePasswordScreen(
     }
 
     // ----- 辅助函数 -----
-    fun addTag() {
-        val trimmed = tagInput.trim()
-        if (trimmed.isNotBlank() && trimmed !in tagList) {
-            tagList = tagList + trimmed
-            tagInput = ""
-        }
-    }
-
     fun validate(): Boolean {
         var valid = true
         if (title.isBlank()) {
@@ -386,29 +380,42 @@ fun CreatePasswordScreen(
                             }
                         }
                     }
-                    // 添加标签输入
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = tagInput,
-                            onValueChange = { tagInput = it },
-                            placeholder = { Text("添加标签（按回车添加）") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { addTag() })
-                        )
-                        IconButton(onClick = { addTag() }) {
-                            Icon(Icons.Default.Add, contentDescription = "添加标签")
-                        }
+                    // 选择已有标签
+                    OutlinedButton(onClick = { showTagMenu = true }) {
+                        Text("选择标签")
                     }
                 }
             }
-
             // 底部占位，避免被 FAB 遮挡
             Spacer(modifier = Modifier.height(80.dp))
         }
+    }
+    // 选择标签弹窗
+    if (showTagMenu) {
+        AlertDialog(
+            onDismissRequest = { showTagMenu = false },
+            title = { Text("选择标签") },
+            text = {
+                val availableTags = allTags.filter { it.name !in tagList }
+                if (availableTags.isEmpty()) {
+                    Text("没有更多标签")
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        availableTags.forEach { tag ->
+                            TextButton(
+                                onClick = {
+                                    tagList = tagList + tag.name
+                                    showTagMenu = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(tag.name, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
     }
 }
