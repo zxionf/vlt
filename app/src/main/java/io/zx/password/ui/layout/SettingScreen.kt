@@ -221,7 +221,11 @@ private fun TextMenu(
     themeState: ThemeState
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf("自动") }
+    val text = when (themeState.themeMode) {
+        ThemeMode.FOLLOW_SYSTEM -> "自动"
+        ThemeMode.LIGHT -> "浅色"
+        ThemeMode.DARK -> "深色"
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.clickable { expanded = true }
@@ -253,7 +257,6 @@ private fun TextMenu(
                 text = { Text("自动") },
                 onClick = {
                     expanded = false
-                    text = "自动"
                     themeState.onThemeModeChange(ThemeMode.FOLLOW_SYSTEM)
                 },
             )
@@ -270,7 +273,6 @@ private fun TextMenu(
                 text = { Text("深色") },
                 onClick = {
                     expanded = false
-                    text = "深色"
                     themeState.onThemeModeChange(ThemeMode.DARK)
                 },
             )
@@ -287,7 +289,6 @@ private fun TextMenu(
                 text = { Text("浅色") },
                 onClick = {
                     expanded = false
-                    text = "浅色"
                     themeState.onThemeModeChange(ThemeMode.LIGHT)
                 },
             )

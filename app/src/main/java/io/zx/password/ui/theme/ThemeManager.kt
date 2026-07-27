@@ -77,6 +77,7 @@ fun rememberThemeState(themePreferences: ThemePreferences): ThemeState {
     return ThemeState(
         themeMode = themeMode,
         onThemeModeChange = { newMode ->
+            themeMode = newMode
             scope.launch {
                 themePreferences.saveThemeMode(newMode)
             }
