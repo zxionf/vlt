@@ -20,6 +20,10 @@ class PwdRepository(
         return Tag(id = id, name = trimmed)
     }
 
+    suspend fun updateTag(tag: Tag) = tagDao.update(tag)
+
+    suspend fun deleteTag(tag: Tag) = tagDao.delete(tag)
+
     fun getTagsForPassword(passwordId: String): Flow<List<Tag>> =
         tagDao.getTagsForPassword(passwordId)
 

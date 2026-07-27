@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DownloadForOffline
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -70,6 +71,7 @@ import io.zx.password.ui.theme.PwdTheme
 @Composable
 fun HomeScreen(
     onAddClick: () -> Unit = {},
+    onTagManageClick: () -> Unit = {},
     onEditItem: (PasswordEntry) -> Unit = {},
     viewModel: PwdViewModel = viewModel(factory = PwdViewModelFactory(LocalContext.current))
 ) {
@@ -97,7 +99,7 @@ fun HomeScreen(
 
         is PwdViewModel.UiState.Success -> {
             val items = (uiState as PwdViewModel.UiState.Success).items
-            HomeScaffold(viewModel, items, onAddClick, onEditItem)
+            HomeScaffold(viewModel, items, onAddClick, onTagManageClick, onEditItem)
         }
 
         is PwdViewModel.UiState.Error -> {
@@ -115,6 +117,7 @@ private fun HomeScaffold(
     viewModel: PwdViewModel,
     items: List<PasswordEntry>,
     onAddClick: () -> Unit,
+    onTagManageClick: () -> Unit,
     onEditItem: (PasswordEntry) -> Unit
 ) {
     var detailItem by remember { mutableStateOf<PasswordEntry?>(null) }
@@ -135,13 +138,13 @@ private fun HomeScaffold(
             TopAppBar(
                 title = { Text(text = "PWD", style = MaterialTheme.typography.headlineSmall) },
                 actions = {
-//                    IconButton(onClick = { }) {
-//                        Icon(
-//                            imageVector = Icons.Default.DownloadForOffline,
-//                            "update",
-//                            modifier = Modifier.size(30.dp)
-//                        )
-//                    }
+                    IconButton(onClick = onTagManageClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Label,
+                            "标签管理",
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
                     IconButton(onClick = onAddClick) {
                         Icon(
                             imageVector = Icons.Default.Add,

@@ -104,4 +104,22 @@ class PwdViewModel(private val repository: PwdRepository) : ViewModel() {
     fun setSelectedTag(tagId: Long?) {
         _selectedTagId.value = if (_selectedTagId.value == tagId) null else tagId
     }
+
+    fun createTag(name: String) {
+        viewModelScope.launch {
+            repository.insertTag(name)
+        }
+    }
+
+    fun updateTag(tag: Tag) {
+        viewModelScope.launch {
+            repository.updateTag(tag)
+        }
+    }
+
+    fun deleteTag(tag: Tag) {
+        viewModelScope.launch {
+            repository.deleteTag(tag)
+        }
+    }
 }

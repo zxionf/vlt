@@ -127,10 +127,17 @@ fun NavigationGraph(
         composable(BottomNavItem.Home.route) {
             HomeScreen(
                 onAddClick = { navController.navigate("create_password") },
+                onTagManageClick = { navController.navigate("tag_manage") },
                 onEditItem = { item ->
                     setEditingItem(item)
                     navController.navigate("create_password")
                 },
+                viewModel = viewModel
+            )
+        }
+        composable("tag_manage") {
+            TagManageScreen(
+                onBack = { navController.popBackStack() },
                 viewModel = viewModel
             )
         }
