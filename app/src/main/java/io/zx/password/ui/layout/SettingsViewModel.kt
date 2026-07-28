@@ -72,30 +72,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         SyncManager.baseUrl = url
     }
 
-    fun registerDevice() {
-        _syncLoading.value = true
-        _syncStatus.value = "注册中..."
-        viewModelScope.launch(Dispatchers.IO) {
-            val device = db.DeviceDao().getCurrentDevice()
-            if (device == null) {
-                _syncStatus.value = "设备未初始化"
-                _syncLoading.value = false
-                return@launch
-            }
-            val result = SyncManager.registerDevice(
-                deviceId = device.deviceId,
-                deviceName = device.deviceName,
-                publicKey = device.publicKey,
-                encryptedDataKey = device.encryptedDataKey ?: ""
-            )
-//            _syncStatus.value = result.fold(
-//                onSuccess = { value -> "注册成功: $value" },
-//                onFailure = { error -> "注册失败: ${error.message}" }
-//            )
-            _syncLoading.value = false
-        }
-    }
-
     fun syncData() {
         _syncLoading.value = true
         _syncStatus.value = "同步中..."

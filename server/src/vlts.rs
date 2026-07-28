@@ -10,24 +10,24 @@ mod db;
 struct Cli {
     #[arg(short, long, default_value = "pwd_server.db")]
     db: String,
-
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    AddDevice {
+        #[arg(short = 'f', long)]
+        file: Option<String>,
+        #[arg(short = 'k', long)]
+        key: Option<String>,
+        #[arg(short, long)]
+        sig: String,
+        #[arg(short, long, default_value = "unknown")]
+        name: String,
+    },
     ListDevices,
-    Authorize {
-        device_id: String,
-        encrypted_data_key: String,
-    },
-    ListRecords {
-        #[arg(short)]
-        device_id: Option<String>,
-        #[arg(short, long, default_value = "20")]
-        limit: i64,
-    },
+    ListRecords { #[arg(short)] device_id: Option<String>, #[arg(short, long, default_value = "20")] limit: i64 },
     Stats,
 }
 
@@ -41,52 +41,67 @@ async fn main() {
     db::migrate(&pool).await;
 
     match cli.command {
+        Commands::AddDevice { file, key, sig, name } => cmd_add_device(&pool, file, key, &sig, &name).await,
         Commands::ListDevices => cmd_list_devices(&pool).await,
-        Commands::Authorize { device_id, encrypted_data_key } => cmd_authorize(&pool, &device_id, &encrypted_data_key).await,
         Commands::ListRecords { device_id, limit } => cmd_list_records(&pool, device_id, limit).await,
         Commands::Stats => cmd_stats(&pool).await,
     }
 }
 
-async fn cmd_list_devices(pool: &SqlitePool) {
-    let rows = sqlx::query(
-        "SELECT device_id, device_name, is_authorized, registered_at FROM devices ORDER BY registered_at DESC"
-    ).fetch_all(pool).await.unwrap();
+async fn cmd_add_device(pool: &SqlitePool, pubkey_file: Option<String>, pubkey_str: Option<String>, sig: &str, name: &str) {
+    use base64::Engine;
+    let pub_key = match (pubkey_file, pubkey_str) {
+        (Some(f), _) => match std::fs::read_to_string(&f) {
+            Ok(s) => s.trim().to_string(),
+            Err(e) => { eprintln!("读取公钥文件失败: {e}"); return; }
+        },
+        (_, Some(s)) => s.trim().to_string(),
+        (None, None) => { eprintln!("请用 -f 指定公钥文件或 -k 输入公钥"); return; }
+    };
+    if pub_key.is_empty() || sig.is_empty() { eprintln!("公钥或签名为空"); return; }
 
-    if rows.is_empty() { println!("暂无设备"); return; }
-    println!("{:<38} {:<20} {:>8}  {}", "device_id", "device_name", "authed", "registered_at");
-    println!("{}", "-".repeat(85));
-    for r in &rows {
-        let auth: i64 = r.get(2);
-        println!("{:<38} {:<20} {:>8}  {}",
-            r.get::<String,_>(0), r.get::<String,_>(1), auth, r.get::<i64,_>(3));
+    let device_id = uuid::Uuid::new_v4().to_string();
+    let dev_bytes = device_id.as_bytes();
+
+    // 验证签名
+    if let Err(e) = (|| -> Result<(), String> {
+        let pk_bytes = base64::engine::general_purpose::STANDARD.decode(&pub_key).map_err(|e| format!("公钥解码: {e}"))?;
+        let pk_arr: [u8; 32] = pk_bytes[..32].try_into().map_err(|_| "无效公钥长度".to_string())?;
+        let vk = ed25519_dalek::VerifyingKey::from_bytes(&pk_arr).map_err(|e| format!("公钥: {e}"))?;
+        let sig_bytes = base64::engine::general_purpose::STANDARD.decode(sig).map_err(|e| format!("签名解码: {e}"))?;
+        let sig_arr: [u8; 64] = sig_bytes[..64].try_into().map_err(|_| "无效签名长度".to_string())?;
+        vk.verify_strict(dev_bytes, &ed25519_dalek::Signature::from_bytes(&sig_arr)).map_err(|e| format!("签名: {e}"))?;
+        Ok(())
+    })() {
+        eprintln!("签名验证失败: {e}"); return;
+    }
+
+    match sqlx::query(
+        "INSERT INTO devices (device_id, device_name, public_key, signature) VALUES (?, ?, ?, ?)"
+    ).bind(&device_id).bind(name).bind(&pub_key).bind(sig).execute(pool).await {
+        Ok(_) => println!("已添加设备:\n  ID:   {device_id}\n  名称: {name}\n  公钥: {pub_key}"),
+        Err(e) => eprintln!("添加失败: {e}"),
     }
 }
 
-async fn cmd_authorize(pool: &SqlitePool, device_id: &str, encrypted_data_key: &str) {
-    let now = chrono::Utc::now().timestamp_millis();
-    match sqlx::query(
-        "INSERT OR REPLACE INTO devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, '', '', '', ?, 1)"
-    ).bind(device_id).bind(now).execute(pool).await {
-        Ok(r) if r.rows_affected() > 0 => {
-            sqlx::query(
-                "INSERT OR REPLACE INTO data_keys (target_device_id, source_device_id, encrypted_data_key, created_at) VALUES (?, 'admin', ?, ?)"
-            ).bind(device_id).bind(encrypted_data_key).bind(now).execute(pool).await.ok();
-            println!("已授权 {}", device_id);
-        }
-        _ => eprintln!("设备未找到"),
+async fn cmd_list_devices(pool: &SqlitePool) {
+    let rows = sqlx::query("SELECT device_id, device_name FROM devices ORDER BY device_id")
+        .fetch_all(pool).await.unwrap();
+    if rows.is_empty() { println!("暂无设备"); return; }
+    println!("{:<38} {:<20}", "device_id", "device_name");
+    println!("{}", "-".repeat(60));
+    for r in &rows {
+        println!("{:<38} {:<20}", r.get::<String,_>(0), r.get::<String,_>(1));
     }
 }
 
 async fn cmd_list_records(pool: &SqlitePool, device_id: Option<String>, limit: i64) {
     let rows = if let Some(ref did) = device_id {
-        sqlx::query(
-            "SELECT record_id, source_device_id, operation, sync_version, server_updated_at FROM sync_records WHERE source_device_id = ? ORDER BY server_updated_at DESC LIMIT ?"
-        ).bind(did).bind(limit).fetch_all(pool).await.unwrap()
+        sqlx::query("SELECT record_id, source_device_id, operation, sync_version, server_updated_at FROM sync_records WHERE source_device_id = ? ORDER BY server_updated_at DESC LIMIT ?")
+            .bind(did).bind(limit).fetch_all(pool).await.unwrap()
     } else {
-        sqlx::query(
-            "SELECT record_id, source_device_id, operation, sync_version, server_updated_at FROM sync_records ORDER BY server_updated_at DESC LIMIT ?"
-        ).bind(limit).fetch_all(pool).await.unwrap()
+        sqlx::query("SELECT record_id, source_device_id, operation, sync_version, server_updated_at FROM sync_records ORDER BY server_updated_at DESC LIMIT ?")
+            .bind(limit).fetch_all(pool).await.unwrap()
     };
     if rows.is_empty() { println!("No records"); return; }
     for r in &rows {
@@ -98,8 +113,6 @@ async fn cmd_list_records(pool: &SqlitePool, device_id: Option<String>, limit: i
 
 async fn cmd_stats(pool: &SqlitePool) {
     let devices: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices").fetch_one(pool).await.unwrap_or(0);
-    let authed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE is_authorized = 1").fetch_one(pool).await.unwrap_or(0);
     let records: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_records").fetch_one(pool).await.unwrap_or(0);
-    let keys: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM data_keys").fetch_one(pool).await.unwrap_or(0);
-    println!("devices: {} | authed: {} | sync_records: {} | data_keys: {}", devices, authed, records, keys);
+    println!("devices: {} | sync_records: {}", devices, records);
 }

@@ -13,23 +13,6 @@ import java.net.URL
 object SyncManager {
     var baseUrl: String = "http://10.0.2.2:8080"
 
-    // ─── 设备管理 ───
-
-    suspend fun registerDevice(deviceId: String, deviceName: String, publicKey: String, encryptedDataKey: String): String = withContext(Dispatchers.IO) {
-        val json = JSONObject().apply {
-            put("device_id", deviceId); put("device_name", deviceName); put("public_key", publicKey)
-            put("encrypted_data_key", encryptedDataKey); put("signature", "")
-        }
-        post("/api/register", json)
-    }
-
-    suspend fun authorizeDevice(fromDeviceId: String, toDeviceId: String, encryptedDataKey: String): String = withContext(Dispatchers.IO) {
-        post("/api/authorize", JSONObject().apply {
-            put("from_device_id", fromDeviceId); put("to_device_id", toDeviceId)
-            put("encrypted_data_key", encryptedDataKey)
-        })
-    }
-
     // ─── 同步 ───
 
     suspend fun pushRecords(records: List<PushRecord>): String = withContext(Dispatchers.IO) {

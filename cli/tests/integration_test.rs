@@ -26,6 +26,10 @@ impl TestContext {
         Self { _tempdir: dir, db_path, _server: Some(server) }
     }
 
+    fn srv_db(&self) -> String {
+        self._tempdir.path().join("srv.db").to_string_lossy().to_string()
+    }
+
     fn run(&self, args: &[&str], password: &str) -> std::process::Output {
         Command::new(env!("CARGO_BIN_EXE_vlt"))
             .args(args)
@@ -83,7 +87,7 @@ fn start_server(db_path: &str) -> Child {
         .unwrap_or_else(|e| panic!("start vltsd failed: {e}"));
     for _ in 0..30 {
         thread::sleep(Duration::from_millis(500));
-        if let Ok(o) = std::process::Command::new("curl")
+        if let Ok(o) = &mut Command::new("curl")
             .args(["-s", &format!("{SERVER_URL}/api/health")])
             .output()
         {
@@ -94,6 +98,24 @@ fn start_server(db_path: &str) -> Child {
     }
     child.kill().ok();
     panic!("vltsd never became ready");
+}
+
+fn query_db(db_path: &str, sql: &str) -> String {
+    let output = Command::new("sqlite3")
+        .arg("-separator").arg("|")
+        .arg(db_path)
+        .arg(sql)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+fn exec_db(db_path: &str, sql: &str) {
+    Command::new("sqlite3")
+        .arg(db_path)
+        .arg(sql)
+        .output()
+        .unwrap();
 }
 
 // ─── 基础功能测试 ───
@@ -125,9 +147,9 @@ fn test_init_add_list_get() {
     let id_prefix: String = first_line.chars().take(8).collect();
     assert!(!id_prefix.is_empty(), "empty id");
 
-    let out = ctx.run(&["get", &id_prefix], "123456");
+    let out = ctx.run(&["show", &id_prefix], "123456");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("Gmail"), "get failed: {}", stdout);
+    assert!(stdout.contains("Gmail"), "show failed: {}", stdout);
 }
 
 #[test]
@@ -156,8 +178,8 @@ fn test_export() {
     assert!(stdout.contains(&outfile), "export: stdout={} stderr={}", stdout, String::from_utf8_lossy(&out.stderr));
 
     let content = std::fs::read_to_string(&outfile).unwrap();
-    assert!(content.contains("Foo"), "export file lacks Foo");
-    assert!(content.contains("encrypted_password"), "export file lacks encrypted_password");
+    assert!(content.contains("Foo"), "export file lackss Foo");
+    assert!(content.contains("enc_password"), "export file lackss enc_password");
 }
 
 #[test]
@@ -175,7 +197,7 @@ fn test_edit() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("已更新"), "edit: stdout={} stderr={}", stdout, String::from_utf8_lossy(&out.stderr));
 
-    let out = ctx.run(&["get", &id_prefix], "asdf");
+    let out = ctx.run(&["show", &id_prefix], "asdf");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Renamed"), "get after edit: stdout={} stderr={}", stdout, String::from_utf8_lossy(&out.stderr));
 }
@@ -185,7 +207,7 @@ fn test_edit() {
 #[test]
 fn test_server_health() {
     let _ctx = TestContext::with_server();
-    let out = std::process::Command::new("curl")
+    let out = Command::new("curl")
         .args(["-s", &format!("{SERVER_URL}/api/health")])
         .output()
         .unwrap();
@@ -194,12 +216,47 @@ fn test_server_health() {
 }
 
 #[test]
-fn test_sync_flow() {
+fn test_sync_push_and_pull() {
     let ctx = TestContext::with_server();
 
-    ctx.run_piped(&["init"], "master\nmaster\nh\n");
-    let out = ctx.run_with_server(&["regist"], "master");
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("authorized") || stdout.contains("pending"),
-        "regist failed: stdout={stdout} stderr=[{}]", String::from_utf8_lossy(&out.stderr));
+    // 设备 A init + add
+    ctx.run_piped(&["init"], "pw1\npw1\nhint\n");
+    ctx.run(&["add", "-t", "A-Google", "-u", "a@a.com", "-p", "a_pass", "-U", "https://a.com", "-n", ""], "pw1");
+    ctx.run(&["add", "-t", "A-GitHub", "-u", "g@hub.com", "-p", "g_pass", "-U", "https://github.com", "-n", ""], "pw1");
+
+    // 从cli db中读取设备ID、公钥，用 signup 获取签名后插入 server
+    let devid = query_db(&ctx.db_path, "SELECT device_id FROM config;");
+    let pubkey = query_db(&ctx.db_path, "SELECT pub_key FROM config;");
+    let out = ctx.run(&["signup"], "pw1");
+    let signup = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = signup.lines().collect();
+    let sig = lines.get(2).unwrap_or(&"");
+    eprintln!("=> device_id={devid} pub_key={pubkey} sig={sig}");
+    exec_db(&ctx.srv_db(), &format!(
+        "INSERT INTO devices (device_id, device_name, public_key, signature) VALUES ('{devid}', 'test-cli', '{pubkey}', '{sig}');"
+    ));
+
+    // push
+    let out = ctx.run_with_server(&["sync", "push"], "pw1");
+    let s = String::from_utf8_lossy(&out.stdout);
+    eprintln!("push: [{s}]");
+    assert!(s.contains("2/2"), "push failed: [{s}]");
+
+    // 删除本地
+    exec_db(&ctx.db_path, "DELETE FROM vaults WHERE is_deleted = 0;");
+
+    let out = ctx.run(&["list"], "pw1");
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("暂无"), "not empty: [{s}]");
+
+    // pull 恢复
+    let out = ctx.run_with_server(&["sync", "pull"], "pw1");
+    let s = String::from_utf8_lossy(&out.stdout);
+    eprintln!("pull: [{s}]");
+    assert!(s.contains("拉取 2 条"), "pull failed: [{s}]");
+
+    // 最终验证
+    let out = ctx.run(&["list"], "pw1");
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("A-Google") && s.contains("A-GitHub"), "list: [{s}]");
 }

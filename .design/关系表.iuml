@@ -44,6 +44,7 @@ package "服务器端" {
         + device_id: UUID <<PK>>
         + device_name: TEXT
         + public_key: TEXT
+        + signature: TEXT
     }
 
     class sync_records {

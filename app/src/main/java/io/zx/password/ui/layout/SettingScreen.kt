@@ -238,21 +238,11 @@ fun SettingScreen() {
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { viewModel.registerDevice() },
-                        enabled = !syncLoading,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("注册设备") }
-                    OutlinedButton(
-                        onClick = { viewModel.syncData() },
-                        enabled = !syncLoading,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("同步") }
-                }
+                OutlinedButton(
+                    onClick = { viewModel.syncData() },
+                    enabled = !syncLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("同步") }
                 if (syncStatus.isNotBlank()) {
                     Text(
                         text = syncStatus,
