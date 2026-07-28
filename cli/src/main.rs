@@ -92,7 +92,10 @@ enum Commands {
     Test,
 
     /// 显示本机设备信息
-    Info,
+    Info {
+        #[arg(short = 'a', long = "all", default_value = "false")]
+        all: bool,
+    },
 
     /// 注册
     Regist,
@@ -145,7 +148,7 @@ async fn main() {
 
     db::migrate(&pool).await;
 
-    let needs_unlock = !matches!(cli.command, Commands::Init | Commands::Test | Commands::Info);
+    let needs_unlock = !matches!(cli.command, Commands::Init | Commands::Test | Commands::Info { .. });
     if needs_unlock {
         if !query::is_initialized(&pool).await { eprintln!("未初始化，请先运行: vlt init"); return; }
         let pass = if let Some(p) = cli.password {
@@ -167,7 +170,7 @@ async fn main() {
         Commands::Delete { id_prefix } => cmd_delete(&pool, &id_prefix).await,
         Commands::Edit { id_prefix, title, username, passwd, url, notes } => cmd_edit(&pool, &id_prefix, title, username, passwd, url, notes).await,
         Commands::Test => cmd_test(&server),
-        Commands::Info => cmd_info(&pool).await,
+        Commands::Info { all } => cmd_info(&pool, all).await,
         Commands::Regist => cmd_regist(&pool, &server).await,
         Commands::Push => cmd_push(&pool, &server).await,
         Commands::Pull => cmd_pull(&pool, &server).await,
@@ -392,15 +395,34 @@ fn cmd_test(server: &str) {
     }
 }
 
-async fn cmd_info(pool: &SqlitePool) {
-    let device = query::get_device(pool).await;
-    match device {
-        Some(d) => {
-            println!("设备 ID:   {}", d.device_id);
-            println!("设备名称:  {}", d.device_name);
-            println!("公钥:      {}", d.public_key);
+async fn cmd_info(pool: &SqlitePool, all: bool) {
+    if all {
+        let devices = query::get_all_devices(pool).await;
+        if devices.is_empty() {
+            eprintln!("未初始化，请先运行: vlt init");
+            return;
         }
-        None => eprintln!("未初始化，请先运行: vlt init"),
+        println!("{:<38} {:<20} {:>8} {:>10}", "device_id", "name", "current", "has_key");
+        println!("{}", "-".repeat(80));
+        for d in &devices {
+            let has_key = if d.encrypted_data_key.is_empty() { "no" } else { "yes" };
+            let current = if d.is_current_device { "*" } else { "" };
+            println!("{:<38} {:<20} {:>8} {:>10}", d.device_id, d.device_name, current, has_key,);
+        }
+    } else {
+        let device = query::get_device(pool).await;
+        match device {
+            Some(d) => {
+                println!("Device ID:   {}", d.device_id);
+                println!("Device Name: {}", d.device_name);
+                println!("Public Key:  {}", d.public_key);
+                let dk = if d.encrypted_data_key.is_empty() { "无".to_string() } else { format!("{} chars", d.encrypted_data_key.len()) };
+                println!("Data Key:    {}", dk);
+                let has_priv = d.encrypted_private_key.as_ref().map(|_| "有").unwrap_or("无");
+                println!("Private Key: {}", has_priv);
+            }
+            None => eprintln!("未初始化，请先运行: vlt init"),
+        }
     }
 }
 

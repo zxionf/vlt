@@ -1,35 +1,25 @@
-@startuml
-' 客户端数据库表
+@startuml 关系表
+
 package "客户端" {
-    class master_auth {
-        + id: INTEGER <<PK>>
-        + salt: TEXT
-        + auth_iv: TEXT
-        + auth_cipher: TEXT
+    class config {
+        + device_id: UUID <<PK>>
+        + kdf_salt: TEXT
+        + kdf_iter: INTEGER
+        + magic_text: TEXT
+        + device_name : TEXT
+        + enc_priv_key: TEXT
+        + pub_key: TEXT
         + password_hint: TEXT
-        + created_at: INTEGER
     }
 
-    class devices {
-        + device_id: TEXT <<PK>>
-        + device_name: TEXT
-        + public_key: TEXT
-        + encrypted_private_key: TEXT
-        + encrypted_data_key: TEXT
-        + is_current_device: BOOLEAN
-        + created_at: INTEGER
-    }
-
-    class passwords {
-        + id: TEXT <<PK>>
+    class vaults {
+        + id: UUID <<PK>>
         + title: TEXT
         + username: TEXT
-        + encrypted_password: TEXT
-        + encrypted_notes: TEXT
+        + enc_password: TEXT
+        + enc_notes: TEXT
         + url: TEXT
-        + created_device_id: TEXT <<FK>>
-        + last_modified_device_id: TEXT <<FK>>
-        + sync_version: INTEGER
+        + version: INTEGER
         + is_deleted: BOOLEAN
         + created_at: INTEGER
         + updated_at: INTEGER
@@ -40,54 +30,34 @@ package "客户端" {
         + name: TEXT
     }
 
-    class password_tag_join {
-        + password_id: TEXT <<PK, FK>>
+    class vault_tag_join {
+        + vault_id: TEXT <<PK, FK>>
         + tag_id: INTEGER <<PK, FK>>
     }
 
-    class sync_cursor {
-        + device_id: TEXT <<PK>>
-        + last_pulled_at: INTEGER
-        + last_server_timestamp: INTEGER
-    }
-
-    ' 客户端表关系
-    devices "1" -- "*" passwords
-    passwords "1" -- "*" password_tag_join
-    tags "1" -- "*" password_tag_join
-    devices "1" -- "1" sync_cursor
+    vaults "1" -- "*" vault_tag_join
+    tags "1" -- "*" vault_tag_join
 }
 
-' 服务器端数据库表
 package "服务器端" {
-    class devices <<server>> {
-        + device_id: TEXT <<PK>>
+    class devices {
+        + device_id: UUID <<PK>>
         + device_name: TEXT
         + public_key: TEXT
-        + signature: TEXT
-        + registered_at: INTEGER
-        + is_authorized: BOOLEAN
     }
 
-    class data_keys <<server>> {
-        + target_device_id: TEXT <<PK, FK>>
-        + source_device_id: TEXT <<PK, FK>>
-        + encrypted_data_key: TEXT
-        + created_at: INTEGER
-    }
-
-    class sync_records <<server>> {
+    class sync_records {
         + record_id: TEXT <<PK>>
         + source_device_id: TEXT <<FK>>
         + encrypted_blob: TEXT
-        + sync_version: INTEGER
+        + blob_nonce : BYTEA <<12 字节随机数>>
+        + sync_version: INTEGER <<单调递增>>
         + operation: TEXT
         + client_updated_at: INTEGER
         + server_updated_at: INTEGER
     }
 
     ' 服务器端表关系
-    devices "1" -- "*" data_keys
     devices "1" -- "*" sync_records
 }
 

@@ -1,19 +1,31 @@
-use std::process::Command;
+use std::process::{Command, Child};
 use std::io::Write;
+use std::thread;
+use std::time::Duration;
+
+static SERVER_URL: &str = "http://127.0.0.1:8080";
 
 struct TestContext {
     db_path: String,
     _tempdir: tempfile::TempDir,
+    _server: Option<Child>,
 }
 
 impl TestContext {
     fn new() -> Self {
         let dir = tempfile::tempdir().expect("create temp dir");
         let db_path = dir.path().join("vault.db").to_string_lossy().to_string();
-        Self { _tempdir: dir, db_path }
+        Self { _tempdir: dir, db_path, _server: None }
     }
 
-    /// 使用 --password 参数的非交互模式
+    fn with_server() -> Self {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let db_path = dir.path().join("vault.db").to_string_lossy().to_string();
+        let srv_db = dir.path().join("srv.db").to_string_lossy().to_string();
+        let server = start_server(&srv_db);
+        Self { _tempdir: dir, db_path, _server: Some(server) }
+    }
+
     fn run(&self, args: &[&str], password: &str) -> std::process::Output {
         Command::new(env!("CARGO_BIN_EXE_vlt"))
             .args(args)
@@ -23,7 +35,6 @@ impl TestContext {
             .expect("spawn failed")
     }
 
-    /// 使用管道给 stdin（用于 init 等需要 rpassword 输入的情况）
     fn run_piped(&self, args: &[&str], stdin: &str) -> std::process::Output {
         use std::process::Stdio;
         let mut child = Command::new(env!("CARGO_BIN_EXE_vlt"))
@@ -40,7 +51,52 @@ impl TestContext {
         }
         child.wait_with_output().unwrap()
     }
+
+    fn run_with_server(&self, args: &[&str], password: &str) -> std::process::Output {
+        Command::new(env!("CARGO_BIN_EXE_vlt"))
+            .args(args)
+            .arg("-D").arg(&self.db_path)
+            .arg("-s").arg(SERVER_URL)
+            .arg("--password").arg(password)
+            .output()
+            .expect("spawn failed")
+    }
 }
+
+impl Drop for TestContext {
+    fn drop(&mut self) {
+        if let Some(ref mut srv) = self._server {
+            srv.kill().ok();
+        }
+    }
+}
+
+fn start_server(db_path: &str) -> Child {
+    let server_bin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap()
+        .join("server/target/debug/vltsd");
+    let mut child = Command::new(&server_bin)
+        .env("DATABASE_URL", format!("sqlite:{}?mode=rwc", db_path))
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("start vltsd failed: {e}"));
+    for _ in 0..30 {
+        thread::sleep(Duration::from_millis(500));
+        if let Ok(o) = std::process::Command::new("curl")
+            .args(["-s", &format!("{SERVER_URL}/api/health")])
+            .output()
+        {
+            if String::from_utf8_lossy(&o.stdout).contains("ok") {
+                return child;
+            }
+        }
+    }
+    child.kill().ok();
+    panic!("vltsd never became ready");
+}
+
+// ─── 基础功能测试 ───
 
 #[test]
 fn test_init_and_unlock() {
@@ -122,4 +178,28 @@ fn test_edit() {
     let out = ctx.run(&["get", &id_prefix], "asdf");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Renamed"), "get after edit: stdout={} stderr={}", stdout, String::from_utf8_lossy(&out.stderr));
+}
+
+// ─── 服务端联调测试 ───
+
+#[test]
+fn test_server_health() {
+    let _ctx = TestContext::with_server();
+    let out = std::process::Command::new("curl")
+        .args(["-s", &format!("{SERVER_URL}/api/health")])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("ok"), "health: [{stdout}]");
+}
+
+#[test]
+fn test_sync_flow() {
+    let ctx = TestContext::with_server();
+
+    ctx.run_piped(&["init"], "master\nmaster\nh\n");
+    let out = ctx.run_with_server(&["regist"], "master");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("authorized") || stdout.contains("pending"),
+        "regist failed: stdout={stdout} stderr=[{}]", String::from_utf8_lossy(&out.stderr));
 }

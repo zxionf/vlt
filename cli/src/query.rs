@@ -53,6 +53,19 @@ pub async fn get_device_by_id(pool: &SqlitePool, device_id: &str) -> Option<Devi
     }
 }
 
+pub async fn get_all_devices(pool: &SqlitePool) -> Vec<Device> {
+    match sqlx::query_as::<_, Device>("SELECT * FROM devices ORDER BY is_current_device DESC, created_at DESC")
+        .fetch_all(pool)
+        .await
+    {
+        Ok(devices) => devices,
+        Err(e) => {
+            eprintln!("获取所有设备失败: {}", e);
+            vec![]
+        }
+    }
+}
+
 pub async fn save_master_auth(
     pool: &SqlitePool,
     salt: &str,
