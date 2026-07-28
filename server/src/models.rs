@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(sqlx::FromRow, Debug, Clone)]
 #[allow(dead_code)]
-pub struct RegisteredDevice {
+pub struct DeviceRecord {
     pub device_id: String,
     pub device_name: String,
     pub public_key: String,
@@ -13,10 +13,10 @@ pub struct RegisteredDevice {
 
 #[derive(sqlx::FromRow, Debug)]
 #[allow(dead_code)]
-pub struct EncryptedDataKey {
+pub struct DataKey {
     pub target_device_id: String,
+    pub source_device_id: String,
     pub encrypted_data_key: String,
-    pub encrypted_by_device: Option<String>,
     pub created_at: i64,
 }
 
@@ -30,15 +30,15 @@ pub struct RegisterDeviceRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct AuthorizeDeviceRequest {
-    pub from_device_id: String,
-    pub to_device_id: String,
+    pub source_device_id: String,
+    pub target_device_id: String,
     pub encrypted_data_key: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SyncPushRecord {
     pub record_id: String,
-    pub device_id: String,
+    pub source_device_id: String,
     pub encrypted_blob: String,
     pub sync_version: i32,
     #[serde(default)]

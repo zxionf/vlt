@@ -1,23 +1,23 @@
-use crate::models::{Device, KeyPair, Password};
+use crate::models::{Device, MasterAuth, Password};
 use sqlx::SqlitePool;
 
 pub async fn is_initialized(pool: &SqlitePool) -> bool {
-    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM key_pair")
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM master_auth")
         .fetch_one(pool)
         .await
         .map(|count| count > 0)
         .unwrap_or(false)
 }
 
-pub async fn get_key_pair(pool: &SqlitePool) -> Option<KeyPair> {
-    match sqlx::query_as::<_, KeyPair>("SELECT * FROM key_pair")
+pub async fn get_master_auth(pool: &SqlitePool) -> Option<MasterAuth> {
+    match sqlx::query_as::<_, MasterAuth>("SELECT * FROM master_auth")
         .fetch_optional(pool)
         .await
     {
-        Ok(Some(kp)) => Some(kp),
+        Ok(Some(ma)) => Some(ma),
         Ok(None) => None,
         Err(e) => {
-            eprintln!("获取 key_pair 失败: {}", e);
+            eprintln!("获取 master_auth 失败: {}", e);
             None
         }
     }
@@ -37,18 +37,34 @@ pub async fn get_device(pool: &SqlitePool) -> Option<Device> {
     }
 }
 
-pub async fn save_key_pair(
+#[allow(dead_code)]
+pub async fn get_device_by_id(pool: &SqlitePool, device_id: &str) -> Option<Device> {
+    match sqlx::query_as::<_, Device>("SELECT * FROM devices WHERE device_id = ?")
+        .bind(device_id)
+        .fetch_optional(pool)
+        .await
+    {
+        Ok(Some(device)) => Some(device),
+        Ok(None) => None,
+        Err(e) => {
+            eprintln!("获取设备 {} 信息失败: {}", device_id, e);
+            None
+        }
+    }
+}
+
+pub async fn save_master_auth(
     pool: &SqlitePool,
     salt: &str,
-    magic_iv: &str,
-    magic_ct: &str,
+    auth_iv: &str,
+    auth_cipher: &str,
     hint: &str,
-    encrypted_priv_key: &str,
+    created_at: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT OR REPLACE INTO key_pair (id, salt, magic_text_iv, magic_text_cipher, password_hint, encrypted_private_key)
+        "INSERT OR REPLACE INTO master_auth (id, salt, auth_iv, auth_cipher, password_hint, created_at)
          VALUES (1, ?1, ?2, ?3, ?4, ?5)"
-    ).bind(salt).bind(magic_iv).bind(magic_ct).bind(hint).bind(encrypted_priv_key)
+    ).bind(salt).bind(auth_iv).bind(auth_cipher).bind(hint).bind(created_at)
     .execute(pool)
     .await?;
     Ok(())
@@ -59,14 +75,15 @@ pub async fn save_device(
     device_id: &str,
     device_name: &str,
     public_key: &str,
+    encrypted_private_key: &str,
     encrypted_data_key: &str,
     is_current_device: bool,
     created_at: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT OR REPLACE INTO devices (device_id, device_name, public_key, encrypted_data_key, is_current_device, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
-    ).bind(device_id).bind(device_name).bind(public_key).bind(encrypted_data_key).bind(is_current_device as i32).bind(created_at)
+        "INSERT OR REPLACE INTO devices (device_id, device_name, public_key, encrypted_private_key, encrypted_data_key, is_current_device, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+    ).bind(device_id).bind(device_name).bind(public_key).bind(encrypted_private_key).bind(encrypted_data_key).bind(is_current_device as i32).bind(created_at)
     .execute(pool)
     .await?;
     Ok(())
@@ -74,7 +91,7 @@ pub async fn save_device(
 
 pub async fn update_device_data_key(pool: &SqlitePool, device_id: &str, encrypted_data_key: &str) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE devices SET encrypted_data_key = ?1 WHERE device_id = ?2 AND is_current_device = 1"
+        "UPDATE devices SET encrypted_data_key = ?1 WHERE device_id = ?2"
     ).bind(encrypted_data_key).bind(device_id).execute(pool).await?;
     Ok(())
 }

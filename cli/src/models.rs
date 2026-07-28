@@ -1,15 +1,15 @@
 #[derive(sqlx::FromRow, Clone, Debug)]
 #[allow(dead_code)]
 pub struct Password {
-    pub id: String,                       // UUID
+    pub id: String,
     pub title: String,
     pub username: String,
-    pub encrypted_password: String,       // base64(iv):base64(cipher)
+    pub encrypted_password: String,
     pub encrypted_notes: Option<String>,
     pub url: Option<String>,
     pub created_device_id: String,
     pub last_modified_device_id: String,
-    pub created_at: i64,                  // 毫秒时间戳
+    pub created_at: i64,
     pub updated_at: i64,
     pub sync_version: i32,
     pub is_deleted: bool,
@@ -17,21 +17,22 @@ pub struct Password {
 
 #[derive(sqlx::FromRow, Debug)]
 #[allow(dead_code)]
-pub struct KeyPair {
-    pub salt: String,                     // Base64
-    pub magic_text_iv: String,
-    pub magic_text_cipher: String,        // 验证主密码的密文
-    pub encrypted_private_key: String,    // 用 K_master 加密的 RSA 私钥
+pub struct MasterAuth {
+    pub salt: String,
+    pub auth_iv: String,
+    pub auth_cipher: String,
     pub password_hint: String,
+    pub created_at: i64,
 }
 
 #[derive(sqlx::FromRow, Debug)]
 #[allow(dead_code)]
 pub struct Device {
-    pub device_id: String,                // UUID
+    pub device_id: String,
     pub device_name: String,
-    pub public_key: String,               // RSA 公钥 Base64
-    pub encrypted_data_key: Option<String>, // 用本机公钥加密的 Data Key
+    pub public_key: String,
+    pub encrypted_private_key: Option<String>,
+    pub encrypted_data_key: String,
     pub is_current_device: bool,
     pub created_at: i64,
 }

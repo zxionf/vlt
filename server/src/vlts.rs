@@ -50,7 +50,7 @@ async fn main() {
 
 async fn cmd_list_devices(pool: &SqlitePool) {
     let rows = sqlx::query(
-        "SELECT device_id, device_name, is_authorized, registered_at FROM registered_devices ORDER BY registered_at DESC"
+        "SELECT device_id, device_name, is_authorized, registered_at FROM devices ORDER BY registered_at DESC"
     ).fetch_all(pool).await.unwrap();
 
     if rows.is_empty() { println!("暂无设备"); return; }
@@ -66,11 +66,11 @@ async fn cmd_list_devices(pool: &SqlitePool) {
 async fn cmd_authorize(pool: &SqlitePool, device_id: &str, encrypted_data_key: &str) {
     let now = chrono::Utc::now().timestamp_millis();
     match sqlx::query(
-        "INSERT OR REPLACE INTO registered_devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, '', '', '', ?, 1)"
+        "INSERT OR REPLACE INTO devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, '', '', '', ?, 1)"
     ).bind(device_id).bind(now).execute(pool).await {
         Ok(r) if r.rows_affected() > 0 => {
             sqlx::query(
-                "INSERT OR REPLACE INTO encrypted_data_keys (target_device_id, encrypted_data_key, created_at) VALUES (?, ?, ?)"
+                "INSERT OR REPLACE INTO data_keys (target_device_id, source_device_id, encrypted_data_key, created_at) VALUES (?, 'admin', ?, ?)"
             ).bind(device_id).bind(encrypted_data_key).bind(now).execute(pool).await.ok();
             println!("已授权 {}", device_id);
         }
@@ -81,11 +81,11 @@ async fn cmd_authorize(pool: &SqlitePool, device_id: &str, encrypted_data_key: &
 async fn cmd_list_records(pool: &SqlitePool, device_id: Option<String>, limit: i64) {
     let rows = if let Some(ref did) = device_id {
         sqlx::query(
-            "SELECT record_id, device_id, operation, sync_version, server_modified_at FROM sync_records WHERE device_id = ? ORDER BY server_modified_at DESC LIMIT ?"
+            "SELECT record_id, source_device_id, operation, sync_version, server_updated_at FROM sync_records WHERE source_device_id = ? ORDER BY server_updated_at DESC LIMIT ?"
         ).bind(did).bind(limit).fetch_all(pool).await.unwrap()
     } else {
         sqlx::query(
-            "SELECT record_id, device_id, operation, sync_version, server_modified_at FROM sync_records ORDER BY server_modified_at DESC LIMIT ?"
+            "SELECT record_id, source_device_id, operation, sync_version, server_updated_at FROM sync_records ORDER BY server_updated_at DESC LIMIT ?"
         ).bind(limit).fetch_all(pool).await.unwrap()
     };
     if rows.is_empty() { println!("No records"); return; }
@@ -97,9 +97,9 @@ async fn cmd_list_records(pool: &SqlitePool, device_id: Option<String>, limit: i
 }
 
 async fn cmd_stats(pool: &SqlitePool) {
-    let devices: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM registered_devices").fetch_one(pool).await.unwrap_or(0);
-    let authed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM registered_devices WHERE is_authorized = 1").fetch_one(pool).await.unwrap_or(0);
+    let devices: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices").fetch_one(pool).await.unwrap_or(0);
+    let authed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE is_authorized = 1").fetch_one(pool).await.unwrap_or(0);
     let records: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_records").fetch_one(pool).await.unwrap_or(0);
-    let keys: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM encrypted_data_keys").fetch_one(pool).await.unwrap_or(0);
+    let keys: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM data_keys").fetch_one(pool).await.unwrap_or(0);
     println!("devices: {} | authed: {} | sync_records: {} | data_keys: {}", devices, authed, records, keys);
 }

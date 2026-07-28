@@ -12,7 +12,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/register", web::post().to(register_device))
             .route("/devices/pending", web::get().to(list_pending))
             .route("/devices/{id}", web::get().to(get_device))
-            .route("/data-key/{device_id}", web::get().to(get_encrypted_data_key))
+            .route("/data-key/{device_id}", web::get().to(get_data_key))
             .route("/authorize", web::post().to(authorize_device))
             .route("/sync/push", web::post().to(sync_push))
             .route("/sync/pull/{since}", web::get().to(sync_pull))
@@ -29,13 +29,13 @@ async fn register_device(
 ) -> HttpResponse {
     let r = body.into_inner();
 
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM registered_devices")
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices")
         .fetch_one(&state.db).await.unwrap_or(0);
 
     if count == 0 {
         let now = chrono::Utc::now().timestamp_millis();
         let result = sqlx::query(
-            "INSERT INTO registered_devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, ?, ?, ?, ?, 1)"
+            "INSERT INTO devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, ?, ?, ?, ?, 1)"
         ).bind(&r.device_id).bind(&r.device_name).bind(&r.public_key).bind(&r.signature)
          .bind(now).execute(&state.db).await;
 
@@ -69,8 +69,8 @@ async fn get_device(
     path: web::Path<String>,
 ) -> HttpResponse {
     let id = path.into_inner();
-    let row = sqlx::query_as::<_, RegisteredDevice>(
-        "SELECT * FROM registered_devices WHERE device_id = ?"
+    let row = sqlx::query_as::<_, DeviceRecord>(
+        "SELECT * FROM devices WHERE device_id = ?"
     ).bind(&id).fetch_optional(&state.db).await;
 
     match row {
@@ -96,13 +96,13 @@ async fn list_pending(
     HttpResponse::Ok().json(out)
 }
 
-async fn get_encrypted_data_key(
+async fn get_data_key(
     state: web::Data<AppState>,
     path: web::Path<String>,
 ) -> HttpResponse {
     let device_id = path.into_inner();
     let row = sqlx::query(
-        "SELECT encrypted_data_key, encrypted_by_device, created_at FROM encrypted_data_keys WHERE target_device_id = ?"
+        "SELECT source_device_id, encrypted_data_key, created_at FROM data_keys WHERE target_device_id = ?"
     ).bind(&device_id).fetch_all(&state.db).await;
 
     match row {
@@ -111,8 +111,8 @@ async fn get_encrypted_data_key(
         }
         Ok(list) => {
             let keys: Vec<serde_json::Value> = list.iter().map(|r| serde_json::json!({
-                "encrypted_data_key": r.get::<String,_>(0),
-                "encrypted_by_device": r.get::<Option<String>,_>(1),
+                "source_device_id": r.get::<String,_>(0),
+                "encrypted_data_key": r.get::<String,_>(1),
                 "created_at": r.get::<i64,_>(2),
             })).collect();
             HttpResponse::Ok().json(keys)
@@ -128,20 +128,20 @@ async fn authorize_device(
     let now = chrono::Utc::now().timestamp_millis();
 
     let reg = sqlx::query(
-        "INSERT OR REPLACE INTO registered_devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, '', '', '', ?, 1)"
-    ).bind(&r.to_device_id).bind(now).execute(&state.db).await;
+        "INSERT OR REPLACE INTO devices (device_id, device_name, public_key, signature, registered_at, is_authorized) VALUES (?, '', '', '', ?, 1)"
+    ).bind(&r.target_device_id).bind(now).execute(&state.db).await;
 
     if reg.is_err() {
         return HttpResponse::InternalServerError().json(serde_json::json!({"error": "db error"}));
     }
 
     sqlx::query(
-        "INSERT OR REPLACE INTO encrypted_data_keys (target_device_id, encrypted_data_key, encrypted_by_device, created_at) VALUES (?, ?, ?, ?)"
-    ).bind(&r.to_device_id).bind(&r.encrypted_data_key).bind(&r.from_device_id).bind(now)
+        "INSERT OR REPLACE INTO data_keys (target_device_id, source_device_id, encrypted_data_key, created_at) VALUES (?, ?, ?, ?)"
+    ).bind(&r.target_device_id).bind(&r.source_device_id).bind(&r.encrypted_data_key).bind(now)
      .execute(&state.db).await.ok();
 
     let mut queue = state.pending_devices.lock().unwrap();
-    queue.retain(|d| d.device_id != r.to_device_id);
+    queue.retain(|d| d.device_id != r.target_device_id);
 
     HttpResponse::Ok().json(serde_json::json!({"ok": true}))
 }
@@ -149,12 +149,12 @@ async fn authorize_device(
 #[derive(sqlx::FromRow)]
 struct SyncPullRow {
     record_id: String,
-    device_id: String,
+    source_device_id: String,
     encrypted_blob: String,
     sync_version: i32,
     operation: String,
-    client_modified_at: i64,
-    server_modified_at: i64,
+    client_updated_at: i64,
+    server_updated_at: i64,
 }
 
 async fn sync_push(
@@ -168,8 +168,8 @@ async fn sync_push(
             else if rec.sync_version <= 1 { "create" }
             else { "update" };
         let r = sqlx::query(
-            "INSERT OR REPLACE INTO sync_records (record_id, device_id, encrypted_blob, sync_version, operation, client_modified_at, server_modified_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).bind(&rec.record_id).bind(&rec.device_id).bind(&rec.encrypted_blob)
+            "INSERT OR REPLACE INTO sync_records (record_id, source_device_id, encrypted_blob, sync_version, operation, client_updated_at, server_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ).bind(&rec.record_id).bind(&rec.source_device_id).bind(&rec.encrypted_blob)
          .bind(rec.sync_version).bind(op).bind(rec.client_updated_at).bind(now)
          .execute(&state.db).await;
         if r.is_ok() { updated += 1; }
@@ -183,19 +183,19 @@ async fn sync_pull(
 ) -> HttpResponse {
     let since = path.into_inner();
     let rows = sqlx::query_as::<_, SyncPullRow>(
-        "SELECT record_id, device_id, encrypted_blob, sync_version, operation, client_modified_at, server_modified_at FROM sync_records WHERE server_modified_at > ? ORDER BY server_modified_at"
+        "SELECT record_id, source_device_id, encrypted_blob, sync_version, operation, client_updated_at, server_updated_at FROM sync_records WHERE server_updated_at > ? ORDER BY server_updated_at"
     ).bind(since).fetch_all(&state.db).await;
 
     match rows {
         Ok(list) => {
             let out: Vec<serde_json::Value> = list.iter().map(|r| serde_json::json!({
                 "record_id": r.record_id,
-                "device_id": r.device_id,
+                "source_device_id": r.source_device_id,
                 "encrypted_blob": r.encrypted_blob,
                 "sync_version": r.sync_version,
                 "operation": r.operation,
-                "client_modified_at": r.client_modified_at,
-                "server_modified_at": r.server_modified_at,
+                "client_updated_at": r.client_updated_at,
+                "server_updated_at": r.server_updated_at,
             })).collect();
             HttpResponse::Ok().json(out)
         }

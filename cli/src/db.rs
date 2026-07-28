@@ -2,19 +2,20 @@ use sqlx::SqlitePool;
 
 pub async fn migrate(pool: &SqlitePool) {
     sqlx::query("PRAGMA foreign_keys = ON;").execute(pool).await.ok();
-    sqlx::query("CREATE TABLE IF NOT EXISTS key_pair (
+    sqlx::query("CREATE TABLE IF NOT EXISTS master_auth (
             id INTEGER PRIMARY KEY DEFAULT 1,
             salt TEXT NOT NULL,
-            magic_text_iv TEXT NOT NULL,
-            magic_text_cipher TEXT NOT NULL,
-            encrypted_private_key TEXT NOT NULL,
-            password_hint TEXT NOT NULL DEFAULT ''
+            auth_iv TEXT NOT NULL,
+            auth_cipher TEXT NOT NULL,
+            password_hint TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL DEFAULT 0
         );").execute(pool).await.ok();
     sqlx::query("CREATE TABLE IF NOT EXISTS devices (
             device_id TEXT PRIMARY KEY,
             device_name TEXT NOT NULL,
             public_key TEXT NOT NULL,
-            encrypted_data_key TEXT,
+            encrypted_private_key TEXT,
+            encrypted_data_key TEXT NOT NULL,
             is_current_device INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL
         );").execute(pool).await.ok();
@@ -42,6 +43,11 @@ pub async fn migrate(pool: &SqlitePool) {
             PRIMARY KEY (password_id, tag_id),
             FOREIGN KEY (password_id) REFERENCES passwords(id) ON DELETE CASCADE,
             FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        );").execute(pool).await.ok();
+    sqlx::query("CREATE TABLE IF NOT EXISTS sync_cursor (
+            device_id TEXT PRIMARY KEY,
+            last_pulled_at INTEGER NOT NULL DEFAULT 0,
+            last_server_timestamp INTEGER NOT NULL DEFAULT 0
         );").execute(pool).await.ok();
 }
 

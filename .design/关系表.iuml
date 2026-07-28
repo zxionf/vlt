@@ -1,21 +1,22 @@
 @startuml
 ' 客户端数据库表
-package "客户端 (Android/Rust CLI)" {
-    class key_pair {
+package "客户端" {
+    class master_auth {
         + id: INTEGER <<PK>>
         + salt: TEXT
-        + magic_text_iv: TEXT
-        + magic_text_cipher: TEXT
-        + encrypted_private_key: TEXT
+        + auth_iv: TEXT
+        + auth_cipher: TEXT
         + password_hint: TEXT
+        + created_at: INTEGER
     }
 
     class devices {
         + device_id: TEXT <<PK>>
         + device_name: TEXT
         + public_key: TEXT
+        + encrypted_private_key: TEXT
         + encrypted_data_key: TEXT
-        + is_current_device: BOOL
+        + is_current_device: BOOLEAN
         + created_at: INTEGER
     }
 
@@ -26,12 +27,12 @@ package "客户端 (Android/Rust CLI)" {
         + encrypted_password: TEXT
         + encrypted_notes: TEXT
         + url: TEXT
-        + created_device_id: TEXT
-        + last_modified_device_id: TEXT
+        + created_device_id: TEXT <<FK>>
+        + last_modified_device_id: TEXT <<FK>>
+        + sync_version: INTEGER
+        + is_deleted: BOOLEAN
         + created_at: INTEGER
         + updated_at: INTEGER
-        + sync_version: INTEGER
-        + is_deleted: BOOL
     }
 
     class tags {
@@ -43,43 +44,51 @@ package "客户端 (Android/Rust CLI)" {
         + password_id: TEXT <<PK, FK>>
         + tag_id: INTEGER <<PK, FK>>
     }
+
+    class sync_cursor {
+        + device_id: TEXT <<PK>>
+        + last_pulled_at: INTEGER
+        + last_server_timestamp: INTEGER
+    }
+
     ' 客户端表关系
-    key_pair "1" -- "1" devices : 本机设备密钥对
-    devices "1" -- "*" passwords : 设备创建的记录
-    passwords "1" -- "*" password_tag_join : 关联
-    tags "1" -- "*" password_tag_join : 关联
+    devices "1" -- "*" passwords
+    passwords "1" -- "*" password_tag_join
+    tags "1" -- "*" password_tag_join
+    devices "1" -- "1" sync_cursor
 }
 
-' 服务器端数据库表（同步服务）
+' 服务器端数据库表
 package "服务器端" {
-    class registered_devices {
+    class devices <<server>> {
         + device_id: TEXT <<PK>>
-        + public_key: TEXT
         + device_name: TEXT
+        + public_key: TEXT
         + signature: TEXT
-        + registered_at: TIMESTAMP
-        + is_authorized: BOOL
+        + registered_at: INTEGER
+        + is_authorized: BOOLEAN
     }
 
-    class encrypted_data_keys {
-        + device_id: TEXT <<PK, FK>>
+    class data_keys <<server>> {
+        + target_device_id: TEXT <<PK, FK>>
+        + source_device_id: TEXT <<PK, FK>>
         + encrypted_data_key: TEXT
-        + created_at: TIMESTAMP
-        + updated_at: TIMESTAMP
+        + created_at: INTEGER
     }
 
-    class sync_records {
+    class sync_records <<server>> {
         + record_id: TEXT <<PK>>
-        + device_id: TEXT
+        + source_device_id: TEXT <<FK>>
         + encrypted_blob: TEXT
         + sync_version: INTEGER
-        + operation: TEXT <<create/update/delete>>
-        + client_modified_at: TIMESTAMP
-        + server_modified_at: TIMESTAMP
+        + operation: TEXT
+        + client_updated_at: INTEGER
+        + server_updated_at: INTEGER
     }
 
-    registered_devices "1" -- "1" encrypted_data_keys
-    registered_devices "1" -- "*" sync_records
+    ' 服务器端表关系
+    devices "1" -- "*" data_keys
+    devices "1" -- "*" sync_records
 }
 
 @enduml

@@ -97,20 +97,20 @@ enum Commands {
     /// 注册
     Regist,
 
-    /// 同步到服务器
-    Upload,
+    /// 推送本地记录到服务器
+    Push,
 
-    /// 从服务器下载
-    Download,
+    /// 拉取服务器记录到本地
+    Pull,
 
-    /// 已授权设备：授权新设备（拉取公钥，加密 Data Key，上传）
+    /// 同步：拉取密钥 + 推送 + 拉取
+    Sync,
+
+    /// 授权新设备（拉取公钥，加密 Data Key，上传）
     Authorize {
         /// 目标设备 ID
         target_device_id: String,
     },
-
-    /// 新设备：拉取本机加密的 Data Key 并导入
-    SyncKey,
 
     Export {
         #[arg(short = 'o', long = "output")]
@@ -169,10 +169,10 @@ async fn main() {
         Commands::Test => cmd_test(&server),
         Commands::Info => cmd_info(&pool).await,
         Commands::Regist => cmd_regist(&pool, &server).await,
-        Commands::Upload => cmd_upload(&pool, &server).await,
-        Commands::Download => cmd_download(&pool, &server).await,
+        Commands::Push => cmd_push(&pool, &server).await,
+        Commands::Pull => cmd_pull(&pool, &server).await,
+        Commands::Sync => cmd_sync(&pool, &server).await,
         Commands::Authorize { target_device_id } => cmd_authorize(&pool, &server, &target_device_id).await,
-        Commands::SyncKey => cmd_sync_key(&pool, &server).await,
         Commands::Export { output } => cmd_export(&pool, output).await,
         Commands::Import { file } => cmd_import(&pool, file).await,
     }
@@ -425,11 +425,12 @@ async fn cmd_regist(pool: &SqlitePool, server: &str) {
             println!("状态: {}", r.status());
             println!("响应: {}", r.text().await.unwrap_or_default());
         }
-        Err(e) => eprintln!("请求失败: {:?}", e),
+        Err(e) => { eprintln!("请求失败: {:?}", e); return; }
     }
+    sync_keys(pool, server).await;
 }
 
-async fn cmd_upload(pool: &SqlitePool, server: &str) {
+async fn cmd_push(pool: &SqlitePool, server: &str) {
     let items: Vec<models::Password> = query::get_all_passwords(pool).await;
     if items.is_empty() { println!("无记录可上传"); return; }
     let client = reqwest::blocking::Client::new();
@@ -447,7 +448,7 @@ async fn cmd_upload(pool: &SqlitePool, server: &str) {
         });
         let payload = serde_json::json!({
             "record_id": item.id,
-            "device_id": device_id,
+            "source_device_id": device_id,
             "encrypted_blob": blob.to_string(),
             "sync_version": item.sync_version,
             "client_updated_at": item.updated_at,
@@ -464,7 +465,8 @@ async fn cmd_upload(pool: &SqlitePool, server: &str) {
     println!("上传完成 {} 成功, {} 失败", uploaded, failed);
 }
 
-async fn cmd_download(pool: &SqlitePool, server: &str) {
+async fn cmd_pull(pool: &SqlitePool, server: &str) {
+    sync_keys(pool, server).await;
     let client = reqwest::blocking::Client::new();
     match client.get(format!("{}/api/sync/pull/0", server)).send() {
         Ok(resp) => {
@@ -561,8 +563,8 @@ async fn cmd_authorize(pool: &SqlitePool, server: &str, target_device_id: &str) 
 
     let my_device = query::get_device(pool).await.unwrap();
     let payload = serde_json::json!({
-        "from_device_id": my_device.device_id,
-        "to_device_id": target_device_id,
+        "source_device_id": my_device.device_id,
+        "target_device_id": target_device_id,
         "encrypted_data_key": encrypted,
     });
 
@@ -575,27 +577,36 @@ async fn cmd_authorize(pool: &SqlitePool, server: &str, target_device_id: &str) 
     }
 }
 
-async fn cmd_sync_key(pool: &SqlitePool, server: &str) {
+async fn sync_keys(pool: &SqlitePool, server: &str) {
     let device = query::get_device(pool).await.unwrap();
     let client = reqwest::Client::new();
 
     let resp = match client.get(format!("{}/api/data-key/{}", server, device.device_id)).send().await {
         Ok(r) => r,
-        Err(e) => { eprintln!("请求失败: {}", e); return; }
+        Err(_) => return,
     };
 
     let keys: Vec<serde_json::Value> = match resp.json().await {
         Ok(v) => v,
-        Err(e) => { eprintln!("解析失败: {}", e); return; }
+        Err(_) => return,
     };
 
-    if keys.is_empty() { eprintln!("暂无 Data Key 可下载"); return; }
+    for k in &keys {
+        let source = k["source_device_id"].as_str().unwrap_or("");
+        let enc_dk = k["encrypted_data_key"].as_str().unwrap_or("");
+        if enc_dk.is_empty() || source.is_empty() { continue; }
+        let device_key = match crypto::decrypt_and_store_data_key(enc_dk) {
+            Ok(dk) => dk,
+            Err(_) => continue,
+        };
+        query::update_device_data_key(pool, source, &device_key).await.ok();
+    }
+}
 
-    let enc_dk = keys[0]["encrypted_data_key"].as_str().unwrap_or("");
-    if enc_dk.is_empty() { eprintln!("Data Key 为空"); return; }
-
-    query::update_device_data_key(pool, &device.device_id, enc_dk).await.ok();
-    println!("Data Key 同步完成");
+async fn cmd_sync(pool: &SqlitePool, server: &str) {
+    sync_keys(pool, server).await;
+    cmd_push(pool, server).await;
+    cmd_pull(pool, server).await;
 }
 
 pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {

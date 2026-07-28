@@ -18,6 +18,7 @@ const NONCE_LEN: usize = 12;
 const PBKDF2_ITERATIONS: u32 = 600_000;
 
 static SESSION_KEY: OnceLock<Mutex<Option<[u8; 32]>>> = OnceLock::new();
+static SESSION_KEK: OnceLock<Mutex<Option<[u8; 32]>>> = OnceLock::new();
 static SESSION_PRIV_KEY: OnceLock<Mutex<Option<RsaPrivateKey>>> = OnceLock::new();
 
 #[derive(Error, Debug)]
@@ -60,6 +61,18 @@ fn get_data_key() -> Result<[u8; 32], CryptoError> {
     guard.ok_or(CryptoError::KeyNotLoaded)
 }
 
+fn set_kek(key: [u8; 32]) {
+    let lock = SESSION_KEK.get_or_init(|| Mutex::new(None));
+    let mut guard = lock.lock().unwrap();
+    *guard = Some(key);
+}
+
+fn get_kek() -> Result<[u8; 32], CryptoError> {
+    let lock = SESSION_KEK.get().ok_or(CryptoError::KeyNotLoaded)?;
+    let guard = lock.lock().unwrap();
+    guard.ok_or(CryptoError::KeyNotLoaded)
+}
+
 fn set_priv_key(key: RsaPrivateKey) {
     let lock = SESSION_PRIV_KEY.get_or_init(|| Mutex::new(None));
     let mut guard = lock.lock().unwrap();
@@ -95,6 +108,20 @@ pub fn get_current_data_key() -> Result<[u8; 32], CryptoError> {
     get_data_key()
 }
 
+pub fn decrypt_and_store_data_key(encrypted_base64: &str) -> Result<String, CryptoError> {
+    let enc = B64.decode(encrypted_base64)?;
+    let priv_key = get_priv_key()?;
+    let padding = Oaep::new::<Sha512>();
+    let dk = priv_key.decrypt(padding, &enc)?;
+    if dk.len() != 32 { return Err(CryptoError::InvalidCipherFormat); }
+    let kek = get_kek()?;
+    let mut nonce = [0u8; NONCE_LEN];
+    rand::thread_rng().fill_bytes(&mut nonce);
+    let cipher = Aes256Gcm::new_from_slice(&kek)?;
+    let ct = cipher.encrypt(Nonce::from_slice(&nonce), dk.as_ref())?;
+    Ok(format!("{}:{}", B64.encode(nonce), B64.encode(ct)))
+}
+
 pub fn encrypt_with_public_key(pub_key_b64: &str, data: &[u8]) -> Result<String, CryptoError> {
     let der = B64.decode(pub_key_b64)?;
     let pub_key = RsaPublicKey::from_pkcs1_der(&der)?;
@@ -117,41 +144,44 @@ pub fn sign_device(device_id: &str, public_key: &str) -> Result<String, CryptoEr
 }
 
 pub async fn verify_and_load(pool: &SqlitePool, password: &str) -> Result<bool, CryptoError> {
-    let info = query::get_key_pair(pool).await.ok_or_else(|| CryptoError::NotInitialized)?;
+    let info = query::get_master_auth(pool).await.ok_or_else(|| CryptoError::NotInitialized)?;
     let salt = B64.decode(&info.salt)?;
     let mut kmaster = [0u8; 32];
     pbkdf2::<Hmac<Sha512>>(password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut kmaster)
         .map_err(|_| CryptoError::AesGcm(aes_gcm::Error))?;
 
     let cipher = Aes256Gcm::new_from_slice(&kmaster)?;
-    let magic_iv = B64.decode(&info.magic_text_iv)?;
-    let magic_ct = B64.decode(&info.magic_text_cipher)?;
-    let magic_ok = match cipher.decrypt(Nonce::from_slice(&magic_iv), magic_ct.as_ref()) {
+    let auth_iv = B64.decode(&info.auth_iv)?;
+    let auth_ct = B64.decode(&info.auth_cipher)?;
+    let auth_ok = match cipher.decrypt(Nonce::from_slice(&auth_iv), auth_ct.as_ref()) {
         Ok(plain) => plain == MAGIC_TEXT.as_bytes(),
         _ => false,
     };
-    if !magic_ok { return Ok(false); }
+    if !auth_ok { return Ok(false); }
 
-    // 用 K_master 解密 RSA 私钥
-    let (iv_s, ct_s) = info.encrypted_private_key.split_once(':')
-        .ok_or(CryptoError::InvalidCipherFormat)?;
-    let priv_iv = B64.decode(iv_s)?;
-    let priv_ct = B64.decode(ct_s)?;
-    let priv_key_der = cipher.decrypt(Nonce::from_slice(&priv_iv), priv_ct.as_ref())?;
-    let priv_key = RsaPrivateKey::from_pkcs8_der(&priv_key_der)?;
-
-    // 用 RSA 私钥解密 Data Key
     let device = query::get_device(pool).await.ok_or(CryptoError::NotInitialized)?;
-    let enc_data_key = device.encrypted_data_key.ok_or(CryptoError::KeyNotLoaded)?;
-    let enc_dk_bytes = B64.decode(&enc_data_key)?;
-    let padding = Oaep::new::<Sha512>();
-    let dk = priv_key.decrypt(padding, &enc_dk_bytes)?;
+
+    if let Some(enc_priv_key) = &device.encrypted_private_key {
+        let (iv_s, ct_s) = enc_priv_key.split_once(':')
+            .ok_or(CryptoError::InvalidCipherFormat)?;
+        let priv_iv = B64.decode(iv_s)?;
+        let priv_ct = B64.decode(ct_s)?;
+        let priv_key_der = cipher.decrypt(Nonce::from_slice(&priv_iv), priv_ct.as_ref())?;
+        let priv_key = RsaPrivateKey::from_pkcs8_der(&priv_key_der)?;
+        set_priv_key(priv_key);
+    }
+
+    let (iv_s, ct_s) = device.encrypted_data_key.split_once(':')
+        .ok_or(CryptoError::InvalidCipherFormat)?;
+    let dk_iv = B64.decode(iv_s)?;
+    let dk_ct = B64.decode(ct_s)?;
+    let dk = cipher.decrypt(Nonce::from_slice(&dk_iv), dk_ct.as_ref())?;
     if dk.len() != 32 { return Err(CryptoError::InvalidCipherFormat); }
     let mut data_key = [0u8; 32];
     data_key.copy_from_slice(&dk);
 
     set_data_key(data_key);
-    set_priv_key(priv_key);
+    set_kek(kmaster);
     Ok(true)
 }
 
@@ -160,61 +190,52 @@ pub async fn initialize_vault(
     password: &str,
     hint: &str,
 ) -> Result<(), CryptoError> {
-    // 生成随机盐 防彩虹表
     let mut salt = [0u8; SALT_LEN];
     rand::thread_rng().fill_bytes(&mut salt);
-    // 派生 AES 密钥
     let mut kmaster = [0u8; 32];
     pbkdf2::<Hmac<Sha512>>(password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut kmaster)
         .map_err(|_| CryptoError::AesGcm(aes_gcm::Error))?;
 
-    // 加密验证文本 Magic Text
     let cipher = Aes256Gcm::new_from_slice(&kmaster)?;
     let mut nonce = [0u8; NONCE_LEN];
     rand::thread_rng().fill_bytes(&mut nonce);
     let ct = cipher.encrypt(Nonce::from_slice(&nonce), MAGIC_TEXT.as_bytes())?;
 
-    // 生成设备密钥对
     let mut rng = rand::thread_rng();
     let priv_key = RsaPrivateKey::new(&mut rng, 3072)?;
     let pub_key = RsaPublicKey::from(&priv_key);
     let pub_key_b64 = B64.encode(pub_key.to_pkcs1_der()?.as_ref());
 
-    // 使用 K_master 加密 RSA 私钥
     let der = priv_key.to_pkcs8_der()?;
     let encrypted_priv_key = encrypt_with_kmaster(&kmaster, der.as_bytes())?;
 
-    // 生成 Data Key
     let mut data_key = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut data_key);
+    let encrypted_data_key = encrypt_with_kmaster(&kmaster, &data_key)?;
 
-    // 本机公钥加密 Data Key
-    let mut rng = rand::thread_rng();
-    let padding = Oaep::new::<Sha512>(); // 使用 SHA‑512 作为 OAEP 哈希
-    let encrypted_data_key = pub_key.encrypt(&mut rng, padding, &data_key)?;
-
-    // 生成设备 ID
     let device_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp_millis();
 
-query::save_key_pair(
+    query::save_master_auth(
         pool,
         &B64.encode(salt),
         &B64.encode(nonce),
         &B64.encode(ct),
         hint,
-        &encrypted_priv_key
+        now,
     ).await?;
     let devname = hostname::get()
         .map(|h| h.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "Unknown Device".to_string());
     query::save_device(
-        &pool,
+        pool,
         &device_id,
-        &devname,   // 可让用户输入设备名
+        &devname,
         &pub_key_b64,
-        &B64.encode(encrypted_data_key),
-        true,                   // is_current_device
-        chrono::Utc::now().timestamp_millis() as i64,
+        &encrypted_priv_key,
+        &encrypted_data_key,
+        true,
+        now,
     ).await?;
     Ok(())
 }
